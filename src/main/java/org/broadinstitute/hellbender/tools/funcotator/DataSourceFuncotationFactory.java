@@ -2,6 +2,7 @@ package org.broadinstitute.hellbender.tools.funcotator;
 
 import com.google.common.annotations.VisibleForTesting;
 import htsjdk.tribble.Feature;
+import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -9,15 +10,25 @@ import org.broadinstitute.barclay.utils.Utils;
 import org.broadinstitute.hellbender.engine.FeatureContext;
 import org.broadinstitute.hellbender.engine.FeatureInput;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
+import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.GencodeFuncotation;
+import org.broadinstitute.hellbender.tools.spark.sv.discovery.SimpleSVType;
+import org.broadinstitute.hellbender.utils.variant.GATKVariantContextUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 
 import java.io.Closeable;
 import java.util.*;
+import java.util.stream.Stream;
 
 /**
  * An abstract class to allow for the creation of a {@link Funcotation} for a given data source.
  * Created by jonn on 8/30/17.
+ *
+ * Subclasses that support the annotation of segments must override:
+ *  getSupportedFuncotationFieldsForSegments()
+ *  isSupportingSegmentFuncotation()
+ *  createFuncotationsOnSegment(...)
+ *
  */
 public abstract class DataSourceFuncotationFactory implements Closeable {
 
@@ -147,6 +158,13 @@ public abstract class DataSourceFuncotationFactory implements Closeable {
     public abstract LinkedHashSet<String> getSupportedFuncotationFields();
 
     /**
+     * @return An ordered {@link LinkedHashSet} of the names of annotations that this Data Source supports when annotating segments.
+     */
+    public LinkedHashSet<String> getSupportedFuncotationFieldsForSegments() {
+        return new LinkedHashSet<>();
+    }
+
+    /**
      * Creates a {@link List} of {@link Funcotation} for the given {@code variant}, {@code referenceContext}, and {@code featureContext}.
      * Accounts for override values passed into the constructor as well.
      * @param variant {@link VariantContext} to annotate.
@@ -186,14 +204,7 @@ public abstract class DataSourceFuncotationFactory implements Closeable {
 
         // If our featureList is compatible with this DataSourceFuncotationFactory, then we make our funcotations:
         if ( isFeatureListCompatible(featureList) ) {
-
-            // Create our funcotations:
-            if ( gencodeFuncotations == null ) {
-                outputFuncotations = createFuncotationsOnVariant(variant, referenceContext, featureList);
-            }
-            else {
-                outputFuncotations = createFuncotationsOnVariant(variant, referenceContext, featureList, gencodeFuncotations);
-            }
+            outputFuncotations = determineFuncotations(variant, referenceContext, featureList, gencodeFuncotations);
 
             // Set our overrides:
             setOverrideValuesInFuncotations(outputFuncotations);
@@ -207,6 +218,23 @@ public abstract class DataSourceFuncotationFactory implements Closeable {
         } else {
             return outputFuncotations;
         }
+    }
+
+    private List<Funcotation> determineFuncotations(final VariantContext variant, final ReferenceContext referenceContext, final List<Feature> featureList, final List<GencodeFuncotation> gencodeFuncotations) {
+        // Create our funcotations:
+        List<Funcotation> outputFuncotations;
+
+        if (isSegmentVariantContext(variant)) {
+            outputFuncotations = createFuncotationsOnSegment(variant, referenceContext, featureList);
+        } else {
+
+            if (gencodeFuncotations == null) {
+                outputFuncotations = createFuncotationsOnVariant(variant, referenceContext, featureList);
+            } else {
+                outputFuncotations = createFuncotationsOnVariant(variant, referenceContext, featureList, gencodeFuncotations);
+            }
+        }
+        return outputFuncotations;
     }
 
     /**
@@ -325,4 +353,39 @@ public abstract class DataSourceFuncotationFactory implements Closeable {
      */
     @VisibleForTesting
     public abstract Class<? extends Feature> getAnnotationFeatureClass();
+
+    /**
+     * @return Whether this funcotation factory can support creating funcotations from segments.
+     */
+    public boolean isSupportingSegmentFuncotation() {
+        return false;
+    }
+
+    /** TODO: Docs
+     *
+     * @param segmentVariantContext
+     * @param referenceContext
+     * @param featureList
+     * @return
+     */
+    public List<Funcotation> createFuncotationsOnSegment(final VariantContext segmentVariantContext,
+                                                         final ReferenceContext referenceContext,
+                                                         final List<Feature> featureList) {
+        throw new GATKException.ShouldNeverReachHereException("This funcotation factory does not support the annotation of segments.");
+    }
+
+    // TODO: Docs
+    // TODO: Tests
+    public static boolean isSegmentVariantContext(final VariantContext vc) {
+        for (final Allele a: vc.getAlternateAlleles()) {
+            final String representation = a.getDisplayString();
+            if (Stream.of(SimpleSVType.SupportedType.values()).anyMatch(s -> SimpleSVType.createBracketedSymbAlleleString(s.toString()).equals(representation))) {
+                return true;
+            }
+            if (a.equals(AnnotatedIntervalToSegmentVariantContextConverter.COPY_NEUTRAL_ALLELE)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

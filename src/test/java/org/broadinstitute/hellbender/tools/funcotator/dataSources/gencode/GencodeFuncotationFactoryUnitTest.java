@@ -9,13 +9,16 @@ import htsjdk.tribble.FeatureReader;
 import htsjdk.tribble.annotation.Strand;
 import htsjdk.tribble.readers.LineIterator;
 import htsjdk.variant.variantcontext.Allele;
+import htsjdk.variant.variantcontext.StructuralVariantType;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.variantcontext.VariantContextBuilder;
+import htsjdk.variant.vcf.VCFConstants;
 import org.broadinstitute.hellbender.GATKBaseTest;
 import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.testutils.FuncotatorReferenceTestUtils;
 import org.broadinstitute.hellbender.tools.funcotator.*;
+import org.broadinstitute.hellbender.tools.spark.sv.discovery.SimpleSVType;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.codecs.gencode.*;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
@@ -1491,8 +1494,6 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
         // We know the first gene is the right one - the gene in question is the MUC16 gene:
         final GencodeGtfGeneFeature gene = (GencodeGtfGeneFeature) gtfFeatureIterator.next();
         final ReferenceContext referenceContext = new ReferenceContext(referenceDataSource, variantInterval );
-
-        // TODO: Make this an input argument:
         final Set<String> requestedTranscriptIds = getValidTranscriptsForGene(expectedGeneName);
 
         // Run this test with flanking turned on for both ends, to make sure that we don't get
@@ -1626,7 +1627,7 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
 
         final GencodeFuncotationBuilder builder =
                 GencodeFuncotationFactory.createGencodeFuncotationBuilderWithTrivialFieldsPopulated(variant, altAllele,
-                        gtfFeature, transcript, "TEST");
+                        transcript, "TEST");
         final GencodeFuncotation gf = builder.gencodeFuncotation;
 
         // Ultra-trivial checks:
@@ -1670,8 +1671,7 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
                                                        final String dataSourceName,
                                                        final GencodeFuncotation expected) {
 
-        final GencodeFuncotation funcotation = GencodeFuncotationFactory.createDefaultFuncotationsOnProblemVariant(
-                variant, altAllele, gtfFeature, reference, transcript, version, dataSourceName, "TEST");
+        final GencodeFuncotation funcotation = GencodeFuncotationFactory.createDefaultFuncotationsOnProblemVariant(variant, altAllele, reference, transcript, version, dataSourceName, "TEST");
         Assert.assertEquals( funcotation, expected );
     }
 
@@ -1804,10 +1804,6 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
      */
     @Test
     public void testMultipleGeneFeaturesOnlyProduceOneTranscript() throws IOException {
-        final GencodeGtfCodec gencodeGtfCodec = new GencodeGtfCodec();
-        Assert.assertTrue(gencodeGtfCodec.canDecode(CNTN4_GENCODE_ANNOTATIONS_FILE_NAME));
-
-        final List<Feature> gencodeFeatures = new ArrayList<>();
 
         // Note the "chr" here to make this work.
         final SimpleInterval variantInterval = new SimpleInterval("chr3", 2944600, 2944600);
@@ -1817,22 +1813,7 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
                 .chr(variantInterval.getContig()).start(variantInterval.getStart()).stop(variantInterval.getEnd())
                 .make();
 
-        try (BufferedInputStream bufferedInputStream =
-                     new BufferedInputStream(
-                             new FileInputStream(CNTN4_GENCODE_ANNOTATIONS_FILE_NAME)
-                     )
-        ) {
-            // Get the line iterator:
-            final LineIterator lineIterator = gencodeGtfCodec.makeSourceFromStream(bufferedInputStream);
-
-            // Get the header (required for the read to work correctly):
-            gencodeGtfCodec.readHeader(lineIterator);
-
-            while (lineIterator.hasNext()) {
-                gencodeFeatures.add(gencodeGtfCodec.decode(lineIterator));
-            }
-            Assert.assertTrue(gencodeFeatures.size() > 1);
-        }
+        final List<Feature> gencodeFeatures = getCntn4Features();
 
         try (final GencodeFuncotationFactory funcotationFactory = new GencodeFuncotationFactory(
                 IOUtils.getPath(CNTN4_GENCODE_TRANSCRIPT_FASTA_FILE),
@@ -1871,12 +1852,96 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
         }
     }
 
+    private List<Feature> getCntn4Features() throws IOException {
+        final GencodeGtfCodec gencodeGtfCodec = new GencodeGtfCodec();
+        Assert.assertTrue(gencodeGtfCodec.canDecode(CNTN4_GENCODE_ANNOTATIONS_FILE_NAME));
+
+        final List<Feature> gencodeFeatures = new ArrayList<>();
+        try (BufferedInputStream bufferedInputStream =
+                     new BufferedInputStream(
+                             new FileInputStream(CNTN4_GENCODE_ANNOTATIONS_FILE_NAME)
+                     )
+        ) {
+            // Get the line iterator:
+            final LineIterator lineIterator = gencodeGtfCodec.makeSourceFromStream(bufferedInputStream);
+
+            // Get the header (required for the read to work correctly):
+            gencodeGtfCodec.readHeader(lineIterator);
+
+            while (lineIterator.hasNext()) {
+                gencodeFeatures.add(gencodeGtfCodec.decode(lineIterator));
+            }
+            Assert.assertTrue(gencodeFeatures.size() > 1);
+        }
+        return gencodeFeatures;
+    }
+
     private static FeatureInput<? extends Feature> createFeatureInputForMuc16Ds(final String dsName) {
         return new FeatureInput<>(FuncotatorTestConstants.GENCODE_DATA_SOURCE_FASTA_PATH_HG19, dsName, Collections.emptyMap());
     }
 
     private static FeatureInput<? extends Feature> createFeatureInputForCntn4Ds(final String dsName) {
         return new FeatureInput<>(CNTN4_GENCODE_ANNOTATIONS_FILE_NAME, dsName, Collections.emptyMap());
+    }
+
+    @DataProvider
+    public Object[][] provideSimpleGenesField() {
+        return new Object[][] {
+
+                // Two genes found
+                {new VariantContextBuilder()
+                        .chr("chr3").start(2613200).stop(3200000)
+                        .attribute(VCFConstants.END_KEY, 3200000)
+                        .alleles(Arrays.asList(
+                                Allele.create("T", true),
+                                Allele.create(SimpleSVType.createBracketedSymbAlleleString(StructuralVariantType.DEL.name()), false))
+                        )
+                        .make(), "CNTN4,CNTN4-AS1"},
+
+                // Three genes found.  Note sorting is alphabetical, not order seen in the genome.
+                //TODO: Is sorting alphabetical or by genomic region?  May have to check oncotator.
+                {new VariantContextBuilder()
+                        .chr("chr3").start(2100000).stop(3200000)
+                        .attribute(VCFConstants.END_KEY, 3200000)
+                        .alleles(Arrays.asList(
+                                Allele.create("T", true),
+                                Allele.create(SimpleSVType.createBracketedSymbAlleleString(StructuralVariantType.DEL.name()), false))
+                        )
+                        .make(), "CNTN4,CNTN4-AS1,CNTN4-AS2"},
+
+                // We use no call for copy neutral
+                {new VariantContextBuilder()
+                        .chr("chr3").start(2100000).stop(3200000)
+                        .attribute(VCFConstants.END_KEY, 3200000)
+                        .alleles(Arrays.asList(
+                                Allele.create("T", true),
+                                AnnotatedIntervalToSegmentVariantContextConverter.COPY_NEUTRAL_ALLELE
+                        ))
+                        .make(), "CNTN4,CNTN4-AS1,CNTN4-AS2"}
+        };
+    }
+
+    @Test(dataProvider = "provideSimpleGenesField")
+    public void testSimpleGenesField(final VariantContext vc, final String genesTruth) throws IOException {
+
+        try (final GencodeFuncotationFactory funcotationFactory = new GencodeFuncotationFactory(
+                IOUtils.getPath(CNTN4_GENCODE_TRANSCRIPT_FASTA_FILE),
+                "VERSION",
+                GencodeFuncotationFactory.DEFAULT_NAME,
+                TranscriptSelectionMode.CANONICAL,
+                Collections.emptySet(),
+                new LinkedHashMap<>(), createFeatureInputForCntn4Ds(GencodeFuncotationFactory.DEFAULT_NAME), "TEST")) {
+            final ReferenceContext referenceContext = new ReferenceContext(refDataSourceHg19Ch3, new SimpleInterval(vc) );
+
+            final FeatureContext featureContext = FuncotatorTestUtils.createFeatureContext(
+                    Collections.singletonList(funcotationFactory), "TEST", new SimpleInterval(vc),
+                    0,0,0,null);
+
+            final List<Funcotation> funcotations = funcotationFactory.createFuncotations(
+                    vc, referenceContext, featureContext);
+            Assert.assertEquals(funcotations.size(), 1);
+            Assert.assertEquals(funcotations.get(0).getField(funcotationFactory.getName() + "_" + funcotationFactory.getVersion() + "_" + "genes"), genesTruth);
+        }
     }
 
     @DataProvider
@@ -2302,7 +2367,7 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
                 { "MUC16", GencodeFuncotation.VariantClassification.THREE_PRIME_FLANK, MUC16_CONTIG, MUC16_START - 11, MUC16_START - 9, "CAG", "C", 0, 10, FuncotatorTestConstants.MUC16_ALL_TRANSCRIPTS_GENCODE_ANNOTATIONS_FILE_NAME, FuncotatorTestConstants.MUC16_ALL_TRANSCRIPTS_GENCODE_TRANSCRIPT_FASTA_FILE, refDataSourceHg19Ch19 },
                 // 3-base deletion, 1 base in the 3' flank and 2 bases outside of it, 3' flank size = 10
                 { "MUC16", GencodeFuncotation.VariantClassification.THREE_PRIME_FLANK, MUC16_CONTIG, MUC16_START - 12, MUC16_START - 10, "TCA", "T", 0, 10, FuncotatorTestConstants.MUC16_ALL_TRANSCRIPTS_GENCODE_ANNOTATIONS_FILE_NAME, FuncotatorTestConstants.MUC16_ALL_TRANSCRIPTS_GENCODE_TRANSCRIPT_FASTA_FILE, refDataSourceHg19Ch19 },
-                
+
                 /*
                  * Multi-base Deletion 3' reverse strand NEGATIVE test cases:
                  */
@@ -2507,5 +2572,110 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
     @Test
     public void testRequiresFeatures() {
         Assert.assertTrue(testMuc16SnpCreateFuncotationsFuncotationFactory.requiresFeatures());
+    }
+
+    @DataProvider
+    public Object[][] provideExonSegmentCalculation() {
+        // 5'UTR 1000-1199
+        // exon0 1200-1299
+        // intron 1300-1499
+        // exon1 1500-1599
+        // intron 1600-1799
+        // exon2 1800-1899
+        // intron 1900-2099
+        // exon3 2100-2199
+        // 3'UTR 2200-2399
+        final GencodeGtfGeneFeature geneFeaturePos = DataProviderForExampleGencodeGtfGene.dynamicallyCreateTestGencodeGtfGeneFeature("chr1",
+                1000, "TESTING", Strand.POSITIVE, 4, 200, 200, 100, 200);
+        // TODO: This is still broken for the negative strand test transcripts.
+        // TODO: Check that the exon numbers are being generated properly
+        // TODO: Move to SegmentExonUtilsUnitTest
+        final GencodeGtfGeneFeature geneFeatureNeg = DataProviderForExampleGencodeGtfGene.dynamicallyCreateTestGencodeGtfGeneFeature("chr1",
+                1000, "TESTING", Strand.NEGATIVE, 4, 200, 200, 100, 200);
+
+        return new Object[][]{
+
+                //  Reminder UTRs still considered part of the exon for purposes of this test.
+                // Segment start breakpoint is in the transcript (overlap)
+                {new SimpleInterval("chr1", 1050, 5000), geneFeaturePos, "0+", ""},
+                {new SimpleInterval("chr1", 1050, 5000), geneFeatureNeg, "3-", ""},
+                {new SimpleInterval("chr1", 1550, 5000), geneFeaturePos, "1+", ""},
+                {new SimpleInterval("chr1", 1550, 5000), geneFeatureNeg, "2-", ""},
+                {new SimpleInterval("chr1", 1850, 5000), geneFeaturePos, "2+", ""},
+                {new SimpleInterval("chr1", 1850, 5000), geneFeatureNeg, "1-", ""},
+                {new SimpleInterval("chr1", 2150, 5000), geneFeaturePos, "3+", ""},
+                {new SimpleInterval("chr1", 2150, 5000), geneFeatureNeg, "0-", ""},
+
+                // Segment start breakpoint is in the transcript (no overlap/ in the intron)
+                {new SimpleInterval("chr1", 1350, 5000), geneFeaturePos, "1+", ""},
+                {new SimpleInterval("chr1", 1350, 5000), geneFeatureNeg, "2-", ""},
+                {new SimpleInterval("chr1", 1650, 5000), geneFeaturePos, "2+", ""},
+                {new SimpleInterval("chr1", 1650, 5000), geneFeatureNeg, "1-", ""},
+                {new SimpleInterval("chr1", 1950, 5000), geneFeaturePos, "3+", ""},
+                {new SimpleInterval("chr1", 1950, 5000), geneFeatureNeg, "0-", ""},
+
+                // Segment start and end breakpoints are in the transcript (overlap)
+                {new SimpleInterval("chr1", 1050, 1550), geneFeaturePos, "0+", "1-"},
+                {new SimpleInterval("chr1", 1050, 1550), geneFeatureNeg, "3-", "2+"},
+                {new SimpleInterval("chr1", 1550, 1850), geneFeaturePos, "1+", "2-"},
+                {new SimpleInterval("chr1", 1550, 1850), geneFeatureNeg, "2-", "1+"},
+                {new SimpleInterval("chr1", 1850, 2150), geneFeaturePos, "2+", "3-"},
+                {new SimpleInterval("chr1", 1850, 2150), geneFeatureNeg, "1-", "0+"},
+                {new SimpleInterval("chr1", 1050, 1850), geneFeaturePos, "0+", "2-"},
+                {new SimpleInterval("chr1", 1050, 1850), geneFeatureNeg, "3-", "1+"},
+                {new SimpleInterval("chr1", 1550, 2150), geneFeaturePos, "1+", "3-"},
+                {new SimpleInterval("chr1", 1550, 2150), geneFeatureNeg, "2-", "0+"},
+
+
+                // Segment start and end breakpoints are in the transcript (no overlap/in the intron)
+                {new SimpleInterval("chr1", 1350, 1650), geneFeaturePos, "1+", "1-"},
+                {new SimpleInterval("chr1", 1350, 1650), geneFeatureNeg, "2-", "2+"},
+                {new SimpleInterval("chr1", 1650, 1950), geneFeaturePos, "2+", "2-"},
+                {new SimpleInterval("chr1", 1650, 1950), geneFeatureNeg, "1-", "1+"},
+                {new SimpleInterval("chr1", 1350, 1950), geneFeaturePos, "1+", "2-"},
+                {new SimpleInterval("chr1", 1350, 1950), geneFeatureNeg, "2-", "1+"},
+
+
+                // Segment end breakpoint is in the transcript (overlap)
+                {new SimpleInterval("chr1", 50, 1050), geneFeaturePos, "", "0-"},
+                {new SimpleInterval("chr1", 50, 1050), geneFeatureNeg, "", "3+"},
+                {new SimpleInterval("chr1", 50, 1550), geneFeaturePos, "", "1-"},
+                {new SimpleInterval("chr1", 50, 1550), geneFeatureNeg, "", "2+"},
+                {new SimpleInterval("chr1", 50, 1850), geneFeaturePos, "", "2-"},
+                {new SimpleInterval("chr1", 50, 1850), geneFeatureNeg, "", "1+"},
+                {new SimpleInterval("chr1", 50, 2150), geneFeaturePos, "", "3-"},
+                {new SimpleInterval("chr1", 50, 2150), geneFeatureNeg, "", "0+"},
+
+                // Segment end breakpoint is in the transcript (no overlap/in the intron)
+                {new SimpleInterval("chr1", 50, 1350), geneFeaturePos, "", "0-"},
+                {new SimpleInterval("chr1", 50, 1350), geneFeatureNeg, "", "3+"},
+                {new SimpleInterval("chr1", 50, 1650), geneFeaturePos, "", "1-"},
+                {new SimpleInterval("chr1", 50, 1650), geneFeatureNeg, "", "2+"},
+                {new SimpleInterval("chr1", 50, 1950), geneFeaturePos, "", "2-"},
+                {new SimpleInterval("chr1", 50, 1950), geneFeatureNeg, "", "1+"},
+
+
+                // Segment breakpoints do not overlap the transcript.
+                {new SimpleInterval("chr1", 4000, 5000), geneFeaturePos, "", ""},
+                {new SimpleInterval("chr1", 4000, 5000), geneFeatureNeg, "", ""},
+
+                // Segment breakpoints do not overlap the transcript.
+                {new SimpleInterval("chr1", 1, 500), geneFeaturePos, "", ""},
+                {new SimpleInterval("chr1", 1, 500), geneFeatureNeg, "", ""},
+
+                // Segment breakpoints do not overlap the transcript, though the transcript does.
+                {new SimpleInterval("chr1", 1, 5000), geneFeaturePos, "", ""},
+                {new SimpleInterval("chr1", 1, 5000), geneFeatureNeg, "", ""}
+        };
+    }
+
+    @Test(dataProvider = "provideExonSegmentCalculation")
+    public void testExonSegmentCalculation(final SimpleInterval segment, final GencodeGtfGeneFeature geneFeature, final String gtStart, final String gtEnd) {
+
+        final SegmentExonOverlaps guess = SegmentExonUtils.determineSegmentExonPosition(geneFeature.getTranscripts().get(0), segment,
+                refDataSourceHg38.getSequenceDictionary());
+
+        Assert.assertEquals(guess.getSegmentStartExonOverlap(), gtStart);
+        Assert.assertEquals(guess.getSegmentEndExonOverlap(), gtEnd);
     }
 }
