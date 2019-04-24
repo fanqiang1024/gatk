@@ -10,6 +10,7 @@ import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.funcotator.FuncotationMap;
 import org.broadinstitute.hellbender.tools.funcotator.OutputRenderer;
+import org.broadinstitute.hellbender.tools.funcotator.dataSources.LocatableFuncotationCreator;
 import org.broadinstitute.hellbender.tools.funcotator.mafOutput.MafOutputRenderer;
 import org.broadinstitute.hellbender.utils.io.Resource;
 import org.broadinstitute.hellbender.utils.tsv.TableColumnCollection;
@@ -108,6 +109,15 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
         // Ensure that all transcript-allele combinations have the same fields inside the matching funcotations.
         if (!txToFuncotationMap.doAllTxAlleleCombinationsHaveTheSameFields()) {
             throw new GATKException.ShouldNeverReachHereException("The funcotation map cannot be written by this simple output renderer.  This is almost certainly an issue for the GATK development team.");
+        }
+
+        for (final String txId : txToFuncotationMap.getTranscriptList()) {
+            for (final Allele allele : txToFuncotationMap.getAlleles(txId)) {
+
+                // This will create a set of funcotations based on the locatable info of a variant context.
+                //  Use the input segment to keep consistency with the input.
+                txToFuncotationMap.add(txId, LocatableFuncotationCreator.create(variant, allele, "FUNCOTATE_SEGMENTS"));
+            }
         }
 
         if (!isWriterInitialized) {

@@ -1,8 +1,10 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
+import com.google.common.collect.ImmutableMap;
 import htsjdk.tribble.Feature;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
+import htsjdk.variant.variantcontext.VariantContextBuilder;
 import htsjdk.variant.vcf.VCFConstants;
 import htsjdk.variant.vcf.VCFHeader;
 import htsjdk.variant.vcf.VCFHeaderLineType;
@@ -21,9 +23,9 @@ import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.tools.copynumber.arguments.CopyNumberStandardArgument;
 import org.broadinstitute.hellbender.tools.copynumber.utils.annotatedinterval.AnnotatedInterval;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.DataSourceUtils;
-import org.broadinstitute.hellbender.tools.funcotator.dataSources.LocatableFuncotationCreator;
 import org.broadinstitute.hellbender.tools.funcotator.metadata.FuncotationMetadata;
 import org.broadinstitute.hellbender.tools.funcotator.metadata.VcfFuncotationMetadata;
+import org.broadinstitute.hellbender.transformers.VariantTransformer;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
 import picard.cmdline.programgroups.VariantEvaluationProgramGroup;
@@ -132,8 +134,9 @@ public class FuncotateSegments extends FeatureWalker<AnnotatedInterval> {
     public void apply(final AnnotatedInterval segment, final ReadsContext readsContext, final ReferenceContext referenceContext, final FeatureContext featureContext) {
 
         // Convert segment into a VariantContext while honoring the funcotation engine's necessary conversions.
-        final VariantContext segmentVariantContext = funcotatorEngine.getDefaultVariantTransformer().apply(
-                AnnotatedIntervalToSegmentVariantContextConverter.convert(segment, referenceContext));
+        final VariantContext segmentVariantContext = funcotatorEngine.getDefaultVariantTransformer()
+                .andThen(getTransformAttributesToStandardNames())
+                .apply(AnnotatedIntervalToSegmentVariantContextConverter.convert(segment, referenceContext));
 
         // Get the correct reference for B37/HG19 compliance:
         // This is necessary because of the variant transformation that gets applied in VariantWalkerBase::apply.
@@ -151,16 +154,14 @@ public class FuncotateSegments extends FeatureWalker<AnnotatedInterval> {
             }
         }
 
-        for (final String txId : funcotationMap.getTranscriptList()) {
-            for (final Allele allele : funcotationMap.getAlleles(txId)) {
 
-                // This will create a set of funcotations based on the locatable info of a variant context.
-                funcotationMap.add(txId, LocatableFuncotationCreator.create(segmentVariantContext, allele, "FUNCOTATE_SEGMENTS"));
-            }
-        }
+        // Force the final output to have the same contig convention as the input.
+        final VariantContext finalVC = new VariantContextBuilder(segmentVariantContext)
+                .chr(segment.getContig())
+                .make();
 
         // write the variant context
-        outputRenderer.write(segmentVariantContext, funcotationMap);
+        outputRenderer.write(finalVC, funcotationMap);
     }
 
     @Override
@@ -203,5 +204,26 @@ public class FuncotateSegments extends FeatureWalker<AnnotatedInterval> {
                         new VCFInfoHeaderLine("build",1, VCFHeaderLineType.String, "Genome build (e.g. 'hg19' or 'hg38').")
                 )
         );
+    }
+
+    private VariantContext transformAttributesToStandardNames(final VariantContext vc) {
+        // Mapping goes from old name to new name.  Note that this is not necessarily what is output, since the output
+        //  renderer might further transform the name.
+        final ImmutableMap<String, String> mapping = new ImmutableMap.Builder<String, String>()
+                .put("MEAN_LOG2_COPY_RATIO", "Segment_Mean")
+                .put("CALL", "Segment_Call")
+                .put("sample", "Sample")
+                .put("sample_id", "Sample")
+                .put("NUM_POINTS_COPY_RATIO", "Num_Probes")
+                .build();
+
+        final Map<String,Object> transformedAttributes = vc.getAttributes().entrySet().stream()
+                .collect(Collectors.toMap(e-> mapping.getOrDefault(e.getKey(), e.getKey()), e -> e.getValue()));
+        final VariantContextBuilder vcb = new VariantContextBuilder(vc).attributes(transformedAttributes);
+        return vcb.make();
+    }
+
+    private VariantTransformer getTransformAttributesToStandardNames() {
+        return vc -> transformAttributesToStandardNames(vc);
     }
 }
