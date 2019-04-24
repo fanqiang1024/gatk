@@ -1,6 +1,7 @@
 package org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.segment;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import htsjdk.samtools.util.Locatable;
 import htsjdk.tribble.annotation.Strand;
 import org.broadinstitute.hellbender.utils.IntervalUtils;
@@ -16,9 +17,21 @@ public class SegmentExonUtils {
     // This should always be -1
     private final static int NO_EXON_OVERLAP = -1;
 
+    /**
+     *
+     * TODO: Docs
+     * @param transcript
+     * @param segment
+     * @return
+     */
     public static SegmentExonOverlaps determineSegmentExonPosition(final GencodeGtfTranscriptFeature transcript, final Locatable segment) {
-        final List<GencodeGtfExonFeature> exons = transcript.getExons();
+
         final String NOT_IN_TRANSCRIPT = "";
+
+        // Internally, this method assumes that the exons are sorted in genomic order.  Which is NOT how these are
+        //  stored in the GencodeGtfTranscriptFeature
+        final List<GencodeGtfExonFeature> exons = transcript.getGenomicStrand() == Strand.NEGATIVE ?
+                Lists.reverse(transcript.getExons()) : transcript.getExons();
 
         if (exons.size() == 0) {
             return new SegmentExonOverlaps(NOT_IN_TRANSCRIPT, NOT_IN_TRANSCRIPT);

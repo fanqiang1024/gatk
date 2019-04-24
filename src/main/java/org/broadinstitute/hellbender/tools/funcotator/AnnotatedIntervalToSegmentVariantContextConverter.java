@@ -40,18 +40,21 @@ public class AnnotatedIntervalToSegmentVariantContextConverter {
         final SimpleInterval startPointInterval = new SimpleInterval(segment.getContig(), segment.getStart(), segment.getStart());
         final Allele refAlleleAtStart = Allele.create(referenceContext.getBases(startPointInterval), true);
 
-        final VariantContextBuilder variantContextBuilder = new VariantContextBuilder();
         final CalledCopyRatioSegment.Call call = retrieveCall(segment);
 
-        return variantContextBuilder
-                .chr(segment.getContig())
+        final VariantContextBuilder variantContextBuilder = new VariantContextBuilder().chr(segment.getContig())
                 .start(segment.getStart())
                 .stop(segment.getEnd())
                 .alleles(Arrays.asList(
                         Allele.create(refAlleleAtStart, false),
                         convertActualSegCallToAllele(call)
                 ))
-                .attribute(VCFConstants.END_KEY, segment.getEnd())
+                .attribute(VCFConstants.END_KEY, segment.getEnd());
+
+        // Grab every field in the annotated interval and make it a string attribute
+        segment.getAnnotations().keySet().stream().forEach(k -> variantContextBuilder.attribute(k, segment.getAnnotationValue(k)));
+
+        return variantContextBuilder
                 .make();
     }
 

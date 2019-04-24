@@ -51,6 +51,8 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
         Assert.assertTrue(collection.getRecords().stream().allMatch(r -> r.getAnnotationValue("end_gene").equals("")));
         Assert.assertTrue(collection.getRecords().stream().allMatch(r -> r.getAnnotationValue("start_exon").equals("")));
         Assert.assertTrue(collection.getRecords().stream().allMatch(r -> r.getAnnotationValue("end_exon").equals("")));
+        Assert.assertTrue(collection.getRecords().stream().allMatch(r -> r.getAnnotationValue("ref_allele").equals("")));
+        Assert.assertTrue(collection.getRecords().stream().allMatch(r -> r.getAnnotationValue("alt_allele").equals("")));
     }
 
     /**
@@ -60,18 +62,40 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
     public Object[][] cntn4GroundTruth() {
         return new Object[][] {
                 {
+
                             // genes
                             Arrays.asList("CNTN4,CNTN4-AS2", "CNTN4,CNTN4-AS1", ""),
                             //start_gene
                             Arrays.asList("", "CNTN4", ""),
                             //end_gene
-                            Arrays.asList("CNTN4", "", "")
+                            Arrays.asList("CNTN4", "", ""),
+                            // ref_allele (always blank)
+                            Arrays.asList("", "", ""),
+                            // alt_allele (always blank)
+                            Arrays.asList("", "", ""),
+                            // Contig
+                            Arrays.asList("3", "3", "3"),
+                            // Start
+                            Arrays.asList("2000000", "3000000", "3500001"),
+                            // End
+                            Arrays.asList("2500000", "3500000", "3900000"),
+                            // Call
+                            Arrays.asList("0", "-", "+"),
+                            // Segment_Mean
+                            Arrays.asList("0.037099", "0.001748", "0.501748"),
+                            // Num_Probes
+                            Arrays.asList("2000", "3000", "4000")
+
                 }
         };
     }
 
     @Test(dataProvider = "cntn4GroundTruth")
-    public void testSimpleMultipleGenesOverlap(List<String> gtGenesValues, List<String> gtStartGeneValues, List<String> gtEndGeneValues) throws IOException {
+    public void testSimpleMultipleGenesOverlap(List<String> gtGenesValues, List<String> gtStartGeneValues, List<String> gtEndGeneValues,
+                                               List<String> gtRefAlleles, List<String> gtAltAlleles,
+                                               List<String> gtContigs, List<String> gtStarts,
+                                               List<String> gtEnds, List<String> gtCalls,
+                                               List<String> gtSegmentMeans, List<String> gtNumProbes) throws IOException {
         final File outputFile = File.createTempFile("funcotatesegs_simple_cntn4", ".seg");
 
         final ArgumentsBuilder arguments = new ArgumentsBuilder();
@@ -98,7 +122,23 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
         Assert.assertEquals(testStartGeneValues, gtStartGeneValues);
         final List<String> testEndGeneValues = collection.getRecords().stream().map(r -> r.getAnnotationValue("end_gene")).collect(Collectors.toList());
         Assert.assertEquals(testEndGeneValues, gtEndGeneValues);
-        // TODO: Check the other fields
+        final List<String> testRefAlleleValues = collection.getRecords().stream().map(r -> r.getAnnotationValue("ref_allele")).collect(Collectors.toList());
+        Assert.assertEquals(testRefAlleleValues, gtRefAlleles);
+        final List<String> testAltAlleleValues = collection.getRecords().stream().map(r -> r.getAnnotationValue("alt_allele")).collect(Collectors.toList());
+        Assert.assertEquals(testAltAlleleValues, gtAltAlleles);
+//        final List<String> testAltAlleleValues = collection.getRecords().stream().map(r -> r.getAnnotationValue("chr")).collect(Collectors.toList());
+//        Assert.assertEquals(testAltAlleleValues, gtAltAlleles);
+//        final List<String> testAltAlleleValues = collection.getRecords().stream().map(r -> r.getAnnotationValue("alt_allele")).collect(Collectors.toList());
+//        Assert.assertEquals(testAltAlleleValues, gtAltAlleles);
+//        final List<String> testAltAlleleValues = collection.getRecords().stream().map(r -> r.getAnnotationValue("alt_allele")).collect(Collectors.toList());
+//        Assert.assertEquals(testAltAlleleValues, gtAltAlleles);
+//        final List<String> testAltAlleleValues = collection.getRecords().stream().map(r -> r.getAnnotationValue("alt_allele")).collect(Collectors.toList());
+//        Assert.assertEquals(testAltAlleleValues, gtAltAlleles);
+//        final List<String> testAltAlleleValues = collection.getRecords().stream().map(r -> r.getAnnotationValue("alt_allele")).collect(Collectors.toList());
+//        Assert.assertEquals(testAltAlleleValues, gtAltAlleles);
+//        final List<String> testAltAlleleValues = collection.getRecords().stream().map(r -> r.getAnnotationValue("alt_allele")).collect(Collectors.toList());
+//        Assert.assertEquals(testAltAlleleValues, gtAltAlleles);
+        // TODO: Check the other fields (sample	Chromosome	Start	End	Segment_Call	Num_Probes	Segment_Mean)
     }
 
     // TODO: hg38 test

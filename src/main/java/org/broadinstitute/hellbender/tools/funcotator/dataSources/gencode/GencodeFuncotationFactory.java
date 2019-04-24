@@ -203,6 +203,9 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
      */
     private final FlankSettings flankSettings;
 
+
+    private final FuncotationMetadata segmentMetadata;
+
     //==================================================================================================================
     // Constructors:
 
@@ -308,6 +311,9 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
 
         // Set our comparator for outputting our funcotations in the right order with the correct "best" transcript:
         gencodeFuncotationComparator = transcriptSelectionMode.getComparator(userRequestedTranscripts);
+
+        // Initialize segment metadata.  This will only be used if funcotating segments.
+        segmentMetadata = createSegmentFuncotationMetadata();
 
         // Initialize overrides / defaults:
         initializeAnnotationOverrides( annotationOverrides );
@@ -2757,15 +2763,15 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
 
     @Override
     public LinkedHashSet<String> getSupportedFuncotationFieldsForSegments() {
-        // TODO: Many more to add here
-        return new LinkedHashSet<>(Arrays.asList(
-                getName() + "_" + getVersion() + "_genes",
-                getName() + "_" + getVersion() + "_start_gene",
-                getName() + "_" + getVersion() + "_end_gene",
-                getName() + "_" + getVersion() + "_start_exon",
-                getName() + "_" + getVersion() + "_end_exon"
-        ));
+        return segmentMetadata.retrieveAllHeaderInfo().stream().map(m -> m.getID())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
+
+    private List<String> getSupportedFuncotationFieldsForSegmentsAsList() {
+        return segmentMetadata.retrieveAllHeaderInfo().stream().map(m -> m.getID())
+                .collect(Collectors.toList());
+    }
+
 
     // TODO: Docs
     private FuncotationMetadata createSegmentFuncotationMetadata() {
@@ -2775,7 +2781,9 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
                         new VCFInfoHeaderLine(getName() + "_" + getVersion() + "_start_gene",1, VCFHeaderLineType.String, "The genes overlapping the start of the segment.  Blank if none."),
                         new VCFInfoHeaderLine(getName() + "_" + getVersion() + "_end_gene",1, VCFHeaderLineType.String, "The genes overlapping the end of the segment.  Blank if none."),
                         new VCFInfoHeaderLine(getName() + "_" + getVersion() + "_start_exon",1, VCFHeaderLineType.String, "The genes overlapping the start of the segment.  Blank if none."),
-                        new VCFInfoHeaderLine(getName() + "_" + getVersion() + "_end_exon",1, VCFHeaderLineType.String, "The genes overlapping the end of the segment.  Blank if none.")
+                        new VCFInfoHeaderLine(getName() + "_" + getVersion() + "_end_exon",1, VCFHeaderLineType.String, "The genes overlapping the end of the segment.  Blank if none."),
+                        new VCFInfoHeaderLine(getName() + "_" + getVersion() + "_alt_allele",1, VCFHeaderLineType.String, "Always blank.  Included for legacy reasons."),
+                        new VCFInfoHeaderLine(getName() + "_" + getVersion() + "_ref_allele",1, VCFHeaderLineType.String, "Always blank.  Included for legacy reasons.")
                 )
         );
     }
@@ -2865,20 +2873,19 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
         final String endGeneValue = endFuncotation == null ? "" : endFuncotation.getHugoSymbol();
         final String startExonValue = chosenTranscriptStart == null ? "" : SegmentExonUtils.determineSegmentExonPosition(chosenTranscriptStart, segmentVariantContext).getSegmentStartExonOverlap();
         final String endExonValue = chosenTranscriptEnd == null ? "" : SegmentExonUtils.determineSegmentExonPosition(chosenTranscriptEnd, segmentVariantContext).getSegmentEndExonOverlap();
-        return segmentVariantContext.getAlternateAlleles().stream().map(a -> TableFuncotation.create(Arrays.asList(
-                getName() + "_" + getVersion() + "_genes",
-                getName() + "_" + getVersion() + "_start_gene",
-                getName() + "_" + getVersion() + "_end_gene",
-                getName() + "_" + getVersion() + "_start_exon",
-                getName() + "_" + getVersion() + "_end_exon"
 
-                //TODO: Exon values are null in some cases.  Should be ""
-                ), Arrays.asList(
-                genesValue,
-                startGeneValue,
-                endGeneValue, startExonValue, endExonValue
-                ),
-            a, getName(), createSegmentFuncotationMetadata())).collect(Collectors.toList());
+        // For legacy reasons, these columns are blank.
+        final String altAlleleValue = "";
+        final String refAlleleValue = "";
+
+        // Ordering of the fields as list is in createSegmentFuncotationMetadata().  Note that this will not dictate
+        //  the rendering in the final output of funcotator, since that is the purview of the OutputRenderer.
+        return segmentVariantContext.getAlternateAlleles().stream().map(a -> TableFuncotation.create(
+                getSupportedFuncotationFieldsForSegmentsAsList(),
+                Arrays.asList(
+                    genesValue, startGeneValue, endGeneValue, startExonValue, endExonValue,
+                    refAlleleValue, altAlleleValue
+                ), a, getName(), segmentMetadata)).collect(Collectors.toList());
     }
 
     private static Set<String> retrieveGeneNamesFromTranscripts(final List<GencodeGtfTranscriptFeature> txs) {

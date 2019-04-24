@@ -18,6 +18,8 @@ import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.testutils.FuncotatorReferenceTestUtils;
 import org.broadinstitute.hellbender.tools.funcotator.*;
+import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.segment.SegmentExonOverlaps;
+import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.segment.SegmentExonUtils;
 import org.broadinstitute.hellbender.tools.spark.sv.discovery.SimpleSVType;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.codecs.gencode.*;
@@ -2672,8 +2674,7 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
     @Test(dataProvider = "provideExonSegmentCalculation")
     public void testExonSegmentCalculation(final SimpleInterval segment, final GencodeGtfGeneFeature geneFeature, final String gtStart, final String gtEnd) {
 
-        final SegmentExonOverlaps guess = SegmentExonUtils.determineSegmentExonPosition(geneFeature.getTranscripts().get(0), segment,
-                refDataSourceHg38.getSequenceDictionary());
+        final SegmentExonOverlaps guess = SegmentExonUtils.determineSegmentExonPosition(geneFeature.getTranscripts().get(0), segment);
 
         Assert.assertEquals(guess.getSegmentStartExonOverlap(), gtStart);
         Assert.assertEquals(guess.getSegmentEndExonOverlap(), gtEnd);

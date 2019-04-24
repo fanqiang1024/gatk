@@ -2158,7 +2158,7 @@ public final class FuncotatorUtils {
      * metadata must include all variant attributes.
      *
      * @param vc The variant context to derive funcotations.  Never {@code null}
-     * @param metadata Existing metadata that matches the variant context info field attributes exactly.  Never {@code null}
+     * @param metadata Existing metadata that must be a superset of the variant context info field attributes.  Never {@code null}
      * @param datasourceName Name to use as the datasource in the funcotations.  Never {@code null}
      * @return A list of funcotations based on the variant context (INFO) attributes.  Never empty, unless the metadata has no fields.  Never {@code null}
      */
@@ -2168,7 +2168,6 @@ public final class FuncotatorUtils {
         Utils.nonNull(metadata);
         Utils.nonNull(datasourceName);
 
-        final List<Funcotation> result = new ArrayList<>();
         final List<String> allFields = metadata.retrieveAllHeaderInfo().stream().map(h -> h.getID()).collect(Collectors.toList());
 
         final Set<String> attributesNotInMetadata = vc.getAttributes().keySet().stream().filter(k -> !allFields.contains(k)).collect(Collectors.toSet());
@@ -2176,15 +2175,33 @@ public final class FuncotatorUtils {
             throw new UserException.MalformedFile("Not all attributes in the variant context appear in the metadata: " + attributesNotInMetadata.stream().collect(Collectors.joining(", ")) + " .... Please add these attributes to the input metadata (e.g. VCF Header).");
         }
 
+        return createFuncotationsFromMetadata(vc, metadata, datasourceName);
+    }
+
+    /**
+     * TODO: Docs
+     * @param vc
+     * @param metadata
+     * @param datasourceName
+     * @return
+     */
+    public static List<Funcotation> createFuncotationsFromMetadata(final VariantContext vc, final FuncotationMetadata metadata, final String datasourceName) {
+
+        Utils.nonNull(vc);
+        Utils.nonNull(metadata);
+        Utils.nonNull(datasourceName);
+
+        final List<String> fields = metadata.retrieveAllHeaderInfo().stream().map(h -> h.getID()).collect(Collectors.toList());
+        final List<Funcotation> result = new ArrayList<>();
         for (final Allele allele: vc.getAlternateAlleles()) {
 
             // We must have fields for everything in the metadata.
             final List<String> funcotationFieldValues = new ArrayList<>();
-            for (final String funcotationFieldName : allFields) {
+            for (final String funcotationFieldName : fields) {
                 funcotationFieldValues.add(vc.getAttributeAsString(funcotationFieldName, ""));
             }
 
-            result.add(TableFuncotation.create(allFields, funcotationFieldValues, allele, datasourceName, metadata));
+            result.add(TableFuncotation.create(fields, funcotationFieldValues, allele, datasourceName, metadata));
         }
 
         return result;

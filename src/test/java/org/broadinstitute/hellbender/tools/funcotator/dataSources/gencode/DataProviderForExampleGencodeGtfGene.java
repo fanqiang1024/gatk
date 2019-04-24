@@ -423,7 +423,7 @@ public class DataProviderForExampleGencodeGtfGene {
                                                                                     final int numExons, final int length5Utr,
                                                                                     final int length3Utr, final int lengthExons, final int lengthIntrons) {
         ParamUtils.isPositive(numExons, "Number of exons must be >= 1");
-        final int totalLength = length3Utr + length5Utr + (lengthExons * numExons) + (lengthIntrons * numExons - 1);
+        final int totalLength = length3Utr + length5Utr + (lengthExons * numExons) + (lengthIntrons * (numExons - 1));
 
         final AtomicInteger featureOrderNum = new AtomicInteger(1);
 
@@ -449,11 +449,11 @@ public class DataProviderForExampleGencodeGtfGene {
 
             // Must calculate the start position going in the reverse direction for negative strand transcripts
             final int exonStart = start + length5Utr + (i * lengthExons) + (i * lengthIntrons);
-            // TODO: Do we need to check strand here and reverse the numbering?
-            final int exonNum = i + 1;
+            final int exonNum = (transcript1.getGenomicStrand() == Strand.NEGATIVE) ? numExons - i : i + 1;
 
             // First exon, needs 5'UTR, start codon (exon) and CDS (exon)
             //  Must include space for the 5'UTR, though that entry is created below.
+            // TODO: Adjust for reverse strand.
             if (i == 0) {
                 final GencodeGtfExonFeature startCodonExon = createStartCodonExon(start, contig, lengthExons,
                         featureOrderNum, geneName, exonNum, length5Utr, codingDirection);
@@ -472,6 +472,10 @@ public class DataProviderForExampleGencodeGtfGene {
                 // Middle exon... just needs CDS
                 tmpExons.add(createMiddleExon(exonStart, contig, lengthExons, featureOrderNum, geneName, exonNum, codingDirection));
             }
+        }
+
+        if (transcript1.getGenomicStrand() == Strand.NEGATIVE) {
+            Collections.reverse(tmpExons);
         }
 
         // create UTR code handles the reverse/forward strand logic

@@ -2254,7 +2254,7 @@ public class FuncotatorUtilsUnitTest extends GATKBaseTest {
 
     @Test(dataProvider = "provideCreateFuncotationsFromVariantContext")
     public void testCreateFuncotationsFromVariantContext(final VariantContext vc, final FuncotationMetadata metadata, final String datasourceName) {
-        final List<Funcotation> funcotations = FuncotatorUtils.createFuncotations(vc, metadata, datasourceName);
+        final List<Funcotation> funcotations = FuncotatorUtils.createFuncotationsFromMetadata(vc, metadata, datasourceName);
 
         Assert.assertTrue(funcotations.stream().allMatch(f -> f.getDataSourceName().equals(datasourceName)));
         Assert.assertEquals(funcotations.stream().map(f -> f.getAltAllele()).collect(Collectors.toSet()), new HashSet<>(vc.getAlternateAlleles()));

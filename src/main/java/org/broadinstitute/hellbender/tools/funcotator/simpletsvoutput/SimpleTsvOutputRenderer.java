@@ -10,7 +10,6 @@ import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.funcotator.FuncotationMap;
 import org.broadinstitute.hellbender.tools.funcotator.OutputRenderer;
-import org.broadinstitute.hellbender.tools.funcotator.dataSources.LocatableFuncotationCreator;
 import org.broadinstitute.hellbender.tools.funcotator.mafOutput.MafOutputRenderer;
 import org.broadinstitute.hellbender.utils.io.Resource;
 import org.broadinstitute.hellbender.utils.tsv.TableColumnCollection;
@@ -36,6 +35,7 @@ import java.util.stream.Collectors;
 public class SimpleTsvOutputRenderer extends OutputRenderer {
 
     private static final Logger logger = LogManager.getLogger(MafOutputRenderer.class);
+    public static final String SIMPLE_TSV_OUTPUT_RENDERER_DUMMY_NAME = "SIMPLE_TSV_OUTPUT_RENDERER";
 
     private TableWriter<LinkedHashMap<String, String>> writer;
     private boolean isWriterInitialized;
@@ -79,7 +79,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
     private void initializeWriter(final LinkedHashMap<String, String> columnNameToFieldNameMap) {
         final TableColumnCollection columns = new TableColumnCollection(columnNameToFieldNameMap.keySet());
         try {
-            writer = TableUtils.writer(outputFilePath.toFile(), columns, (map, dataLine) -> {
+            writer = TableUtils.writer(outputFilePath, columns, (map, dataLine) -> {
                 map.keySet().forEach(k -> dataLine.append(map.get(k)));
             });
         } catch (final IOException ioe) {
@@ -108,14 +108,6 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
         // Ensure that all transcript-allele combinations have the same fields inside the matching funcotations.
         if (!txToFuncotationMap.doAllTxAlleleCombinationsHaveTheSameFields()) {
             throw new GATKException.ShouldNeverReachHereException("The funcotation map cannot be written by this simple output renderer.  This is almost certainly an issue for the GATK development team.");
-        }
-
-        // This class will create a set of funcotations based on the locatable info of a variant context.
-        for (final String txId : txToFuncotationMap.getTranscriptList()) {
-            for (final Allele allele : txToFuncotationMap.getAlleles(txId)) {
-                // TODO: Get rid of null here.  Replace with facility to make a funcotation metadata.
-                txToFuncotationMap.add(txId, LocatableFuncotationCreator.create(variant, allele, "SIMPLE_TSV_OUTPUT_RENDERER", null));
-            }
         }
 
         if (!isWriterInitialized) {

@@ -1,6 +1,7 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
 import htsjdk.tribble.Feature;
+import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.vcf.VCFConstants;
 import htsjdk.variant.vcf.VCFHeader;
@@ -20,6 +21,8 @@ import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.tools.copynumber.arguments.CopyNumberStandardArgument;
 import org.broadinstitute.hellbender.tools.copynumber.utils.annotatedinterval.AnnotatedInterval;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.DataSourceUtils;
+import org.broadinstitute.hellbender.tools.funcotator.dataSources.LocatableFuncotationCreator;
+import org.broadinstitute.hellbender.tools.funcotator.metadata.FuncotationMetadata;
 import org.broadinstitute.hellbender.tools.funcotator.metadata.VcfFuncotationMetadata;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
@@ -126,11 +129,11 @@ public class FuncotateSegments extends FeatureWalker<AnnotatedInterval> {
     }
 
     @Override
-    public void apply(final AnnotatedInterval feature, final ReadsContext readsContext, final ReferenceContext referenceContext, final FeatureContext featureContext) {
+    public void apply(final AnnotatedInterval segment, final ReadsContext readsContext, final ReferenceContext referenceContext, final FeatureContext featureContext) {
 
-        // Convert feature into a VariantContext while honoring the funcotation engine's necessary conversions.
+        // Convert segment into a VariantContext while honoring the funcotation engine's necessary conversions.
         final VariantContext segmentVariantContext = funcotatorEngine.getDefaultVariantTransformer().apply(
-                AnnotatedIntervalToSegmentVariantContextConverter.convert(feature, referenceContext));
+                AnnotatedIntervalToSegmentVariantContextConverter.convert(segment, referenceContext));
 
         // Get the correct reference for B37/HG19 compliance:
         // This is necessary because of the variant transformation that gets applied in VariantWalkerBase::apply.
@@ -139,6 +142,22 @@ public class FuncotateSegments extends FeatureWalker<AnnotatedInterval> {
         // funcotate
         //  The resulting funcotation map should only have one transcript ID (which is the "no transcript" ID).
         final FuncotationMap funcotationMap = funcotatorEngine.createFuncotationMapForSegment(segmentVariantContext, correctReferenceContext, featureContext);
+
+        // This will propagate input variant context attributes to the output
+        // TODO: Populate with the proper metadata.
+        for (final String txId : funcotationMap.getTranscriptList()) {
+            for (final Allele allele : funcotationMap.getAlleles(txId)) {
+                funcotationMap.add(txId, FuncotatorUtils.createFuncotationsFromMetadata(segmentVariantContext, createMetadata(), "FUNCOTATE_SEGMENTS"));
+            }
+        }
+
+        for (final String txId : funcotationMap.getTranscriptList()) {
+            for (final Allele allele : funcotationMap.getAlleles(txId)) {
+
+                // This will create a set of funcotations based on the locatable info of a variant context.
+                funcotationMap.add(txId, LocatableFuncotationCreator.create(segmentVariantContext, allele, "FUNCOTATE_SEGMENTS"));
+            }
+        }
 
         // write the variant context
         outputRenderer.write(segmentVariantContext, funcotationMap);
@@ -172,5 +191,17 @@ public class FuncotateSegments extends FeatureWalker<AnnotatedInterval> {
         } else {
             return new SimpleInterval(feature);
         }
+    }
+
+    private FuncotationMetadata createMetadata() {
+        return VcfFuncotationMetadata.create(
+                Arrays.asList(
+                        new VCFInfoHeaderLine("Segment_Mean",1, VCFHeaderLineType.Float, "Mean for the segment.  Units will be the same as the input file."),
+                        new VCFInfoHeaderLine("Num_Probes",1, VCFHeaderLineType.Integer, "Number of probes/targets/bins overlapping the segment."),
+                        new VCFInfoHeaderLine("Segment_Call",1, VCFHeaderLineType.String, "Segment call (whether the segment is amplified, deleted, etc)."),
+                        new VCFInfoHeaderLine("Sample",1, VCFHeaderLineType.String, "Sample name for the segment."),
+                        new VCFInfoHeaderLine("build",1, VCFHeaderLineType.String, "Genome build (e.g. 'hg19' or 'hg38').")
+                )
+        );
     }
 }
