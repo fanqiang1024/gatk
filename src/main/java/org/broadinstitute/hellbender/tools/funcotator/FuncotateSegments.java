@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
 
 // TODO: Fill in the docs and do not forget Oncotator citation.
 @CommandLineProgramProperties(
-        summary = " (similar functionality to Oncotator).",
+        summary = " (similar functionality to Oncotator).  Note:  Will attempt to preserve the input file convention for the contig name.",
         oneLineSummary = "Functional Annotator",
         programGroup = VariantEvaluationProgramGroup.class
 )

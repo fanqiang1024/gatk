@@ -3,6 +3,9 @@ package org.broadinstitute.hellbender.tools.funcotator.simpletsvoutput;
 import com.google.common.collect.Sets;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
+import org.apache.commons.configuration2.Configuration;
+import org.apache.commons.configuration2.builder.fluent.Configurations;
+import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,10 +23,7 @@ import org.codehaus.plexus.util.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -53,6 +53,18 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
     private final LinkedHashMap<String, String> unaccountedForDefaultAnnotations;
     private final LinkedHashMap<String, String> unaccountedForOverrideAnnotations;
 
+    /**
+     * TODO: Docs
+     * @param outputFilePath
+     * @param unaccountedForDefaultAnnotations
+     * @param unaccountedForOverrideAnnotations
+     * @param referenceVersion
+     * @param excludedOutputFields
+     * @param configPath -- Confiugration file where each key is a column and a comma-separated list of fields acts as a
+     *                   list of possible aliases.  Note that the list of the keys is the same order that will be seen
+     *                   in the output.
+     * @param toolVersion
+     */
     public SimpleTsvOutputRenderer(final Path outputFilePath,
                                    final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
                                    final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
@@ -116,7 +128,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
 
                 // This will create a set of funcotations based on the locatable info of a variant context.
                 //  Use the input segment to keep consistency with the input.
-                txToFuncotationMap.add(txId, LocatableFuncotationCreator.create(variant, allele, "FUNCOTATE_SEGMENTS"));
+                txToFuncotationMap.add(txId, LocatableFuncotationCreator.create(variant, allele, SIMPLE_TSV_OUTPUT_RENDERER_DUMMY_NAME));
             }
         }
 
@@ -224,17 +236,20 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
      * @return mapping of output column names to possible field names in order of priority.  Never {@code null}
      */
     private static LinkedHashMap<String, List<String>> createColumnNameToAliasesMap(final Path resourceFile){
-        final Properties configFileContents = new Properties();
-        try ( final InputStream inputStream = Files.newInputStream(resourceFile, StandardOpenOption.READ) ) {
-            configFileContents.load(inputStream);
-        } catch (final Exception ex) {
-            throw new UserException.BadInput("Unable to read from XSV config file: " + resourceFile.toUri().toString(), ex);
-        }
 
-        final Set<String> keys = configFileContents.stringPropertyNames();
-        return keys.stream().collect(Collectors.toMap(Function.identity(), k -> Arrays.asList(StringUtils.split(configFileContents.getProperty(k), ",")),
+        // Use Apache Commons configuration since it will preserve the order of the keys in the config file.
+        //  Properties will not preserve the ordering, since it is backed by a HashSet.
+        try {
+            final Configuration configFileContents = new Configurations().properties(resourceFile.toFile());
+            final List<String> keys = new ArrayList<>();
+            configFileContents.getKeys().forEachRemaining(k -> keys.add(k));
+            return keys.stream().collect(Collectors.toMap(Function.identity(), k -> Arrays.asList(StringUtils.split(configFileContents.getString(k), ",")),
                 (x1, x2) -> {
                     throw new IllegalArgumentException("Should not be able to have duplicate field names."); },
                 LinkedHashMap::new ));
+
+        } catch (final ConfigurationException ce) {
+            throw new UserException.BadInput("Unable to read from XSV config file: " + resourceFile.toUri().toString(), ce);
+        }
     }
 }

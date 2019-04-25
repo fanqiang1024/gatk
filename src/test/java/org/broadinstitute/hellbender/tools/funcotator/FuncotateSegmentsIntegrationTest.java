@@ -25,7 +25,7 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
     private static final String TEST_SUB_DIR = toolsTestDir + "/funcotator/";
     private static final String SIMPLE_TEST_FILE = TEST_SUB_DIR + "simple.seg";
     private static final String SIMPLE_TEST_CNTN4_FILE = TEST_SUB_DIR + "simple_cntn4_overlap.seg";
-    private static final String TEST_GATK_FILE = TEST_SUB_DIR + "SM-74NF5.called.seg";
+    private static final String TEST_GATK_FILE_B37 = TEST_SUB_DIR + "SM-74NF5.called.seg";
     private static final String REF = b37Reference;
     private static final String DS_PIK3CA_DIR  = largeFileTestDir + "funcotator" + File.separator + "small_ds_pik3ca" + File.separator;
     // This has transcripts with multiple gene names...
@@ -145,7 +145,7 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
 
         final ArgumentsBuilder arguments = new ArgumentsBuilder();
         arguments.add("--" + CopyNumberStandardArgument.SEGMENTS_FILE_LONG_NAME);
-        arguments.add(TEST_GATK_FILE);
+        arguments.add(TEST_GATK_FILE_B37);
         arguments.add("--" + FuncotatorArgumentDefinitions.OUTPUT_FORMAT_LONG_NAME);
         arguments.add(FuncotatorArgumentDefinitions.OutputFormatType.SEG);
         arguments.add("--" + StandardArgumentDefinitions.REFERENCE_LONG_NAME);
@@ -171,7 +171,7 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
             Assert.assertTrue(outputSegmentCollection.getRecords().stream().allMatch(r -> StringUtils.isEmpty(r.getAnnotationValue(f))), f + " was populated and it should not be.")
         );
 
-        // Left is the output name.  Right is the input name.
+        // Left is the output name.  Right is the input name.  These fields should have the exact same values in the input and output
         final List<Pair<String,String>> testPairedFieldNames = Arrays.asList(
           Pair.of("Num_Probes", "NUM_POINTS_COPY_RATIO"),
                 Pair.of("Segment_Mean", "MEAN_LOG2_COPY_RATIO"),
@@ -182,7 +182,7 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
         );
 
         for (final Pair<String,String> pairedFields : testPairedFieldNames) {
-            final AnnotatedIntervalCollection inputSegmentCollection = AnnotatedIntervalCollection.create(Paths.get(TEST_GATK_FILE), null);
+            final AnnotatedIntervalCollection inputSegmentCollection = AnnotatedIntervalCollection.create(Paths.get(TEST_GATK_FILE_B37), null);
             Assert.assertEquals(outputSegmentCollection.getRecords().stream().map(r -> r.getAnnotationValue(pairedFields.getLeft())).collect(Collectors.toList()),
                     inputSegmentCollection.getRecords().stream().map(r -> r.getAnnotationValue(pairedFields.getRight())).collect(Collectors.toList()));
         }
