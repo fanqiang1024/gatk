@@ -192,4 +192,5 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
     }
 
     // TODO: hg38 test
+    // TODO: Seg file with no segments test.  Test that a header is produced.
 }

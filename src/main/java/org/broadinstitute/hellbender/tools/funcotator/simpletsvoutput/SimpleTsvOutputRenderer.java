@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.tools.funcotator.simpletsvoutput;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
@@ -9,6 +10,7 @@ import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.broadinstitute.barclay.utils.Utils;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.funcotator.FuncotationMap;
@@ -21,15 +23,17 @@ import org.broadinstitute.hellbender.utils.tsv.TableUtils;
 import org.broadinstitute.hellbender.utils.tsv.TableWriter;
 import org.codehaus.plexus.util.StringUtils;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * This class is very versatile, but as a result, it must do some lazy loading after it receives the first write command.
+ *
+ * IMPORTANT:  If this class is not given any command to write(...), the output file will be empty.
  *
  * This class assumes that funcotation maps will have the same fields regardless of allele.
  */
@@ -49,48 +53,36 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
     private LinkedHashMap<String, String> columnNameToFuncotationFieldMap;
     private Set<String> excludedOutputFields;
     private Path outputFilePath;
-    private final String referenceVersion;
     private final LinkedHashMap<String, String> unaccountedForDefaultAnnotations;
     private final LinkedHashMap<String, String> unaccountedForOverrideAnnotations;
 
-    /**
-     * TODO: Docs
-     * @param outputFilePath
-     * @param unaccountedForDefaultAnnotations
-     * @param unaccountedForOverrideAnnotations
-     * @param referenceVersion
-     * @param excludedOutputFields
-     * @param configPath -- Confiugration file where each key is a column and a comma-separated list of fields acts as a
-     *                   list of possible aliases.  Note that the list of the keys is the same order that will be seen
-     *                   in the output.
-     * @param toolVersion
-     */
-    public SimpleTsvOutputRenderer(final Path outputFilePath,
+
+    private SimpleTsvOutputRenderer(final Path outputFilePath,
                                    final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
                                    final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
-                                   final String referenceVersion, final Set<String> excludedOutputFields,
-                                   final Path configPath, final String toolVersion) {
+                                   final Set<String> excludedOutputFields, final Path configPath,
+                                   final String toolVersion) {
         super(toolVersion);
+
+        Utils.nonNull(outputFilePath);
+        Utils.nonNull(unaccountedForDefaultAnnotations);
+        Utils.nonNull(unaccountedForOverrideAnnotations);
+        Utils.nonNull(excludedOutputFields);
+        Utils.nonNull(configPath);
+        Utils.nonNull(toolVersion);
+
         this.excludedOutputFields = excludedOutputFields;
         this.outputFilePath = outputFilePath;
         isWriterInitialized = false;
-        this.referenceVersion = referenceVersion;
-
-        try {
-            final File tmpResourceFile = Resource.getResourceContentsAsFile(configPath.toString());
-            columnNameToAliasesMap = createColumnNameToAliasesMap(tmpResourceFile.toPath());
-        } catch (final IOException ioe) {
-            throw new GATKException.ShouldNeverReachHereException("Could not read config file: " + configPath,
-                    ioe);
-        }
+        columnNameToAliasesMap = createColumnNameToAliasesMap(configPath);
 
         this.unaccountedForDefaultAnnotations = unaccountedForDefaultAnnotations;
         this.unaccountedForOverrideAnnotations = unaccountedForOverrideAnnotations;
     }
 
     // This method uses the fact that the keys of the input are ordered.
-    private void initializeWriter(final LinkedHashMap<String, String> columnNameToFieldNameMap) {
-        final TableColumnCollection columns = new TableColumnCollection(columnNameToFieldNameMap.keySet());
+    private void initializeWriter(final List<String> columnNames) {
+        final TableColumnCollection columns = new TableColumnCollection(columnNames);
         try {
             writer = TableUtils.writer(outputFilePath, columns, (map, dataLine) -> {
                 map.keySet().forEach(k -> dataLine.append(map.get(k)));
@@ -104,6 +96,11 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
     @Override
     public void close() {
         try {
+            // Initialize the writer (so that we can write column names and do not just produce a blank file when
+            //  write was never called).
+            if (!isWriterInitialized) {
+                initializeWriter(new ArrayList<>(columnNameToAliasesMap.keySet()));
+            }
             if (writer != null) {
                 writer.close();
             }
@@ -136,7 +133,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
             // Developer note:  the "get(0)" is okay, since we know that all transcript-allele combinations have the same fields.
             // Note that columnNameToFuncotationFieldMap will also hold the final say for what columns will get rendered in the end.
             columnNameToFuncotationFieldMap = createColumnNameToFieldNameMap(columnNameToAliasesMap, txToFuncotationMap, txToFuncotationMap.getTranscriptList().get(0), excludedOutputFields);
-            initializeWriter(columnNameToFuncotationFieldMap);
+            initializeWriter(new ArrayList<>(columnNameToFuncotationFieldMap.keySet()));
         }
         try {
             for (final String txId : txToFuncotationMap.getTranscriptList()) {
@@ -212,9 +209,25 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
         return result;
     }
 
-    //TODO: Docs (candidate is ordered by priority)  This method also assumes that funcotation fields are not allowed to have null values.
-    // TODO: Mention that this assumes that the funcotation map has the same fields regardless of allele.
+    /**
+     * Search the given funcotations (derived from the funoctation map and transcript key) for the first field that
+     *  appears in the candidate field name list.
+     *
+     * Notes:
+     * - Candidate field names should be listed in order of priority, since this method will return the first match.
+     * - This method assumes that the funcotation map has the same fields regardless of allele.
+     *
+     * @param candidateFieldNames field names to find in priority order.  Never {@code null}
+     * @param txToFuncotationMap {@link FuncotationMap} to search for field names.  Never {@code null}
+     * @param txId transcript ID to use in the search.   Never {@code null}
+     * @return the first candidate field name found in the funcotation map.
+     *  Returns empty string ("") if nothing is found.
+     */
     private static String findFieldNameInFuncotations(final List<String> candidateFieldNames, final FuncotationMap txToFuncotationMap, final String txId) {
+        Utils.nonNull(candidateFieldNames);
+        Utils.nonNull(txToFuncotationMap);
+        Utils.nonNull(txId);
+
         final Set<String> funcotationFieldNames = txToFuncotationMap.getFieldNames(txId);
         return candidateFieldNames.stream()
                 .filter(funcotationFieldNames::contains)
@@ -232,24 +245,76 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
     /**
      * Create key value pairs where the key is the output column name and the value is a list of possible field names, in order of priority.
      *
-     * @param resourceFile config file that encodes column_name:alias_1,alias_2 ....
+     * @param configFile config file that encodes column_name:alias_1,alias_2 ....
      * @return mapping of output column names to possible field names in order of priority.  Never {@code null}
      */
-    private static LinkedHashMap<String, List<String>> createColumnNameToAliasesMap(final Path resourceFile){
+    @VisibleForTesting
+    static LinkedHashMap<String, List<String>> createColumnNameToAliasesMap(final Path configFile){
 
         // Use Apache Commons configuration since it will preserve the order of the keys in the config file.
         //  Properties will not preserve the ordering, since it is backed by a HashSet.
         try {
-            final Configuration configFileContents = new Configurations().properties(resourceFile.toFile());
+            final Configuration configFileContents = new Configurations().properties(configFile.toFile());
             final List<String> keys = new ArrayList<>();
             configFileContents.getKeys().forEachRemaining(k -> keys.add(k));
-            return keys.stream().collect(Collectors.toMap(Function.identity(), k -> Arrays.asList(StringUtils.split(configFileContents.getString(k), ",")),
+            return keys.stream().collect(Collectors.toMap(Function.identity(), k -> Arrays.asList(splitAndTrim(configFileContents.getString(k), ",")),
                 (x1, x2) -> {
                     throw new IllegalArgumentException("Should not be able to have duplicate field names."); },
                 LinkedHashMap::new ));
 
         } catch (final ConfigurationException ce) {
-            throw new UserException.BadInput("Unable to read from XSV config file: " + resourceFile.toUri().toString(), ce);
+            throw new UserException.BadInput("Unable to read from XSV config file: " + configFile.toUri().toString(), ce);
         }
+    }
+
+    /**
+     * @param outputFilePath {@link Path} to write.  Never {@code null}
+     * @param unaccountedForDefaultAnnotations {@link LinkedHashMap} of default annotations that must be added.  Never {@code null}
+     * @param unaccountedForOverrideAnnotations {@link LinkedHashMap} of override annotations that must be added.  Never {@code null}
+     * @param excludedOutputFields {@link Set} column names that are not to appear in the output file.  Use an empty set
+     *                                        for no exclusions.  Never {@code null}
+     * @param configPath Configuration file  where each key is a column and a comma-separated list of fields acts as a
+     *                   list of possible aliases.  Note that the list of the keys is the same order that will be seen
+     *                   in the output.
+     * @param toolVersion The version number of the tool used to produce the VCF file.  Never {@code null}
+     */
+    public static SimpleTsvOutputRenderer createFromFile(final Path outputFilePath,
+                                                         final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
+                                                         final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
+                                                         final Set<String> excludedOutputFields, final Path configPath,
+                                                         final String toolVersion) {
+        return new SimpleTsvOutputRenderer(outputFilePath, unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations,
+                excludedOutputFields, configPath, toolVersion);
+    }
+
+    /**
+     * Use when loading the config file from the jar.
+     *
+     * See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
+     *
+     * @param outputFilePath See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
+     * @param unaccountedForDefaultAnnotations See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
+     * @param unaccountedForOverrideAnnotations See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
+     * @param excludedOutputFields See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
+     * @param resourcePath Configuration file (as a Resource).  See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
+     * @param toolVersion See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
+     */
+    public static SimpleTsvOutputRenderer createFromResource(final Path outputFilePath,
+                                                         final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
+                                                         final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
+                                                         final Set<String> excludedOutputFields, final Path resourcePath,
+                                                         final String toolVersion) {
+        try {
+            return new SimpleTsvOutputRenderer(outputFilePath, unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations,
+                    excludedOutputFields, Resource.getResourceContentsAsFile(resourcePath.toString()).toPath(), toolVersion);
+        } catch (final IOException ioe) {
+            throw new GATKException.ShouldNeverReachHereException("Could not read config file: " + resourcePath,
+                    ioe);
+        }
+    }
+
+    @VisibleForTesting
+    static String[] splitAndTrim( String text, String separator ) {
+        return Stream.of(StringUtils.split(text, separator)).map(s -> s.trim()).toArray(String[]::new);
     }
 }

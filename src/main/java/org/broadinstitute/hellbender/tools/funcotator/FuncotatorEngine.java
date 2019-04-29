@@ -267,10 +267,9 @@ public final class FuncotatorEngine implements AutoCloseable {
                 // TODO: Make sure this SEG block is correct.  Still needs composite output renderer probably.
             // TODO: Magic constant (resource location)
             case SEG:
-                outputRenderer = new SimpleTsvOutputRenderer(funcotatorArgs.outputFile.toPath(),
+                outputRenderer = SimpleTsvOutputRenderer.createFromResource(funcotatorArgs.outputFile.toPath(),
                         unaccountedForDefaultAnnotations,
-                        unaccountedForOverrideAnnotations,
-                        funcotatorArgs.referenceVersion, funcotatorArgs.excludedFields,
+                        unaccountedForOverrideAnnotations, funcotatorArgs.excludedFields,
                         Paths.get("org/broadinstitute/hellbender/tools/funcotator/simple_funcotator_seg_file.config"),
                         gatkToolInstance.getVersion());
                 break;
