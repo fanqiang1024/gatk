@@ -1,6 +1,7 @@
 package org.broadinstitute.hellbender.tools.funcotator.simpletsvoutput;
 
 import htsjdk.variant.variantcontext.VariantContext;
+import htsjdk.variant.variantcontext.VariantContextBuilder;
 import htsjdk.variant.vcf.VCFHeaderLineType;
 import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import org.broadinstitute.hellbender.GATKBaseTest;
@@ -30,13 +31,12 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
     private static final String TEST_SUB_DIR = toolsTestDir + "/funcotator/";
     private static final String SEG_CONFIG_FILE = TEST_SUB_DIR + "test_tsv_output.config";
     private static final String SEG_RESOURCE_FILE = "org/broadinstitute/hellbender/tools/funcotator/simple_funcotator_seg_file.config";
+    public static final String FUNCOTATION_FIELD_1 = "TO_BE_ALIASED1";
 
     @DataProvider
     public Object[][] provideForSimpleSegFileWriting() {
         return new Object[][] {
-                {FuncotatorTestUtils.createSimpleVariantContext(FuncotatorReferenceTestUtils.retrieveHg19Chr3Ref(),
-                        "3", 2100000, 3200000, "T",
-                        AnnotatedIntervalToSegmentVariantContextConverter.COPY_NEUTRAL_ALLELE.getDisplayString())
+                {createDummyVariantContext()
                 }
         };
     }
@@ -60,6 +60,19 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
         renderer.write(segVC, funcotationMap);
         renderer.close();
 
+        // Create the entire list of OUTPUT field names in order.
+        //   Note that the locatable fields are always emitted in alphabetical order if no aliases are found.
+        final List<String> outputFieldNames = Arrays.asList("genes", "foo1", "foo2", "foo3", "foo3!!", "CONTIG", "END", "START");
+        final List<String> outputFieldValues = new ArrayList<>();
+        outputFieldValues.addAll(fieldValues);
+        outputFieldValues.addAll(Arrays.asList(segVC.getContig(), String.valueOf(segVC.getEnd()), String.valueOf(segVC.getStart())));
+        final List<LinkedHashMap<String,String>> gtOutputRecords = Collections.singletonList(
+                createLinkedHashMapFromLists(outputFieldNames, outputFieldValues));
+
+        assertTsvFile(outputFile, gtOutputRecords);
+    }
+
+    private void assertTsvFile(final File outputFile, final List<LinkedHashMap<String, String>> gtOutputRecords) throws IOException {
         final TableReader<LinkedHashMap<String,String>> outputReader = TableUtils.reader(outputFile.toPath(),
                 (columns, exceptionFactory) -> {
                     return (dataLine) -> {
@@ -75,21 +88,9 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
                 }
         );
 
-        // Create the entire list of OUTPUT field names in order.
-        //   Note that the locatable fields are always emitted in alphabetical order if no aliases are found.
-        final List<String> outputFieldNames = Arrays.asList("genes", "foo1", "foo2", "foo3", "foo3!!", "CONTIG", "END", "START");
-        final List<String> outputFieldValues = new ArrayList<>();
-        outputFieldValues.addAll(fieldValues);
-        outputFieldValues.addAll(Arrays.asList(segVC.getContig(), String.valueOf(segVC.getEnd()), String.valueOf(segVC.getStart())));
-
         // Check that the ordering of the column is correct.
         final List<LinkedHashMap<String,String>> outputRecords = outputReader.toList();
-        Assert.assertEquals(outputRecords.size(), 1);
-        final LinkedHashMap<String, String> onlyRecord = outputRecords.get(0);
-        Assert.assertEquals(new ArrayList<>(onlyRecord.keySet()), outputFieldNames);
-
-        // Check the values.
-        Assert.assertEquals(onlyRecord.keySet().stream().map(k -> onlyRecord.get(k)).collect(Collectors.toList()), outputFieldValues);
+        assertLinkedHashMapsEqual(outputRecords, gtOutputRecords);
     }
 
     private static FuncotationMetadata createDummySegmentFuncotationMetadata() {
@@ -151,8 +152,163 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
         Assert.assertEquals(new ArrayList<>(guess.values()), new ArrayList<>(gt.values()));
     }
 
-    // TODO: Update other test to just use a dictionary of aliases, not the config file.
+    private <T,U> void assertLinkedHashMapsEqual(final List<LinkedHashMap<T, U>> guess, final List<LinkedHashMap<T, U>> gt) {
+        IntStream.range(0, guess.size()).boxed().forEach(i -> assertLinkedHashMapsEqual(guess.get(i), gt.get(i)));
+    }
 
-    // TODO: Test override
-    // TODO: Test defaults
+    @DataProvider
+    public Object[][] provideForAliasing() {
+        return new Object[][] {
+                {
+                    // No aliases, so remaining fields will be in alphabetical order
+                    new LinkedHashMap<>(), new LinkedHashMap<>(), new HashSet<>(), new LinkedHashMap<>(),
+                        createDummyVariantContext(),
+                        createSimpleFuncotationMap(),
+                        Arrays.asList("CONTIG", "END", "START", FUNCOTATION_FIELD_1),
+                        Arrays.asList("CONTIG", "END", "START", FUNCOTATION_FIELD_1),
+                        Arrays.asList("3", "3200000", "2100000", "value1")
+                },
+
+                {
+                    // Simple alias of foo:FUNCOTATION_FIELD_1
+                    new LinkedHashMap<>(), new LinkedHashMap<>(), new HashSet<>(),
+                        createLinkedHashMapStringToStringList(Collections.singletonList("foo"), Collections.singletonList(Collections.singletonList(FUNCOTATION_FIELD_1))),
+                        createDummyVariantContext(),
+                        createSimpleFuncotationMap(),
+                        Arrays.asList("foo", "CONTIG", "END", "START"),
+                        Arrays.asList(FUNCOTATION_FIELD_1, "CONTIG", "END", "START"),
+                        Arrays.asList("value1", "3", "3200000", "2100000")
+                },
+                {
+                        // Simple alias of foo:...,FUNCOTATION_FIELD_1
+                        new LinkedHashMap<>(), new LinkedHashMap<>(), new HashSet<>(),
+                        createLinkedHashMapStringToStringList(Collections.singletonList("foo"), Collections.singletonList(Arrays.asList("DUMMY1", "DUMMY2", FUNCOTATION_FIELD_1, "DUMMY3"))),
+                        createDummyVariantContext(),
+                        createSimpleFuncotationMap(),
+                        Arrays.asList("foo", "CONTIG", "END", "START"),
+                        Arrays.asList(FUNCOTATION_FIELD_1, "CONTIG", "END", "START"),
+                        Arrays.asList("value1", "3", "3200000", "2100000")
+                },
+                {
+                        // Simple alias of foo:...,FUNCOTATION_FIELD_1, but we exclude the "CONTIG" and "START" fields
+                        new LinkedHashMap<>(), new LinkedHashMap<>(), new HashSet<>(Arrays.asList("CONTIG", "START")),
+                        createLinkedHashMapStringToStringList(Collections.singletonList("foo"), Collections.singletonList(Arrays.asList("DUMMY1", "DUMMY2", FUNCOTATION_FIELD_1, "DUMMY3"))),
+                        createDummyVariantContext(),
+                        createSimpleFuncotationMap(),
+                        Arrays.asList("foo", "END"),
+                        Arrays.asList(FUNCOTATION_FIELD_1, "END"),
+                        Arrays.asList("value1", "3200000")
+                },
+                {
+                        // Simple alias of foo:...,FUNCOTATION_FIELD_1, but we exclude the "CONTIG", "foo", and "START" fields
+                        new LinkedHashMap<>(), new LinkedHashMap<>(), new HashSet<>(Arrays.asList("foo", "CONTIG", "START")),
+                        createLinkedHashMapStringToStringList(Collections.singletonList("foo"), Collections.singletonList(Arrays.asList("DUMMY1", "DUMMY2", FUNCOTATION_FIELD_1, "DUMMY3"))),
+                        createDummyVariantContext(),
+                        createSimpleFuncotationMap(),
+                        Collections.singletonList("END"),
+                        Collections.singletonList("END"),
+                        Collections.singletonList("3200000")
+                },
+                {
+                        // Simple alias of foo:...,FUNCOTATION_FIELD_1 with default.
+                        createLinkedHashMapFromLists(Arrays.asList("foo", "foo2", "foo3"), Arrays.asList("BAD_DEFAULT", "val2", "val3")), new LinkedHashMap<>(), new HashSet<>(),
+                        createLinkedHashMapStringToStringList(Collections.singletonList("foo"), Collections.singletonList(Arrays.asList("DUMMY1", "DUMMY2", FUNCOTATION_FIELD_1, "DUMMY3"))),
+                        createDummyVariantContext(),
+                        createSimpleFuncotationMap(),
+                        Arrays.asList("foo", "CONTIG", "END", "START", "foo2", "foo3"),
+                        Arrays.asList(FUNCOTATION_FIELD_1, "CONTIG", "END", "START", "foo2", "foo3"),
+                        Arrays.asList("value1", "3", "3200000", "2100000", "val2", "val3")
+                },
+                {
+                        // Simple alias of foo:...,FUNCOTATION_FIELD_1 with overrides.
+                        new LinkedHashMap<>(), createLinkedHashMapFromLists(Arrays.asList("foo", "foo2", "foo3"), Arrays.asList("OVERRIDE", "val2", "val3")),  new HashSet<>(),
+                        createLinkedHashMapStringToStringList(Collections.singletonList("foo"), Collections.singletonList(Arrays.asList("DUMMY1", "DUMMY2", FUNCOTATION_FIELD_1, "DUMMY3"))),
+                        createDummyVariantContext(),
+                        createSimpleFuncotationMap(),
+                        Arrays.asList("foo", "CONTIG", "END", "START", "foo2", "foo3"),
+                        Arrays.asList(FUNCOTATION_FIELD_1, "CONTIG", "END", "START", "foo2", "foo3"),
+                        Arrays.asList("OVERRIDE", "3", "3200000", "2100000", "val2", "val3")
+                },
+                {
+                        // Simple alias of foo:...,FUNCOTATION_FIELD_1 with overrides and excluding some of the overrides.
+                        new LinkedHashMap<>(), createLinkedHashMapFromLists(Arrays.asList("foo", "foo2", "foo3"), Arrays.asList("OVERRIDE", "val2", "val3")),  new HashSet<>(Arrays.asList("foo2", "foo3")),
+                        createLinkedHashMapStringToStringList(Collections.singletonList("foo"), Collections.singletonList(Arrays.asList("DUMMY1", "DUMMY2", FUNCOTATION_FIELD_1, "DUMMY3"))),
+                        createDummyVariantContext(),
+                        createSimpleFuncotationMap(),
+                        Arrays.asList("foo", "CONTIG", "END", "START"),
+                        Arrays.asList(FUNCOTATION_FIELD_1, "CONTIG", "END", "START"),
+                        Arrays.asList("OVERRIDE", "3", "3200000", "2100000")
+                }
+        };
+    }
+
+    private VariantContext createDummyVariantContext() {
+        return FuncotatorTestUtils.createSimpleVariantContext(FuncotatorReferenceTestUtils.retrieveHg19Chr3Ref(),
+                "3", 2100000, 3200000, "T",
+                AnnotatedIntervalToSegmentVariantContextConverter.COPY_NEUTRAL_ALLELE.getDisplayString());
+    }
+
+    private VariantContext createDummyVariantContextWithAttributes(final Map<String, String> attributes) {
+        return new VariantContextBuilder(FuncotatorTestUtils.createSimpleVariantContext(FuncotatorReferenceTestUtils.retrieveHg19Chr3Ref(),
+                "3", 2100000, 3200000, "T",
+                AnnotatedIntervalToSegmentVariantContextConverter.COPY_NEUTRAL_ALLELE.getDisplayString()))
+                .attributes(attributes).make();
+    }
+
+    private FuncotationMap createSimpleFuncotationMap() {
+        return FuncotationMap.createNoTranscriptInfo(
+                Collections.singletonList(
+                        TableFuncotation.create(Collections.singletonList(FUNCOTATION_FIELD_1), Collections.singletonList("value1"),
+                                AnnotatedIntervalToSegmentVariantContextConverter.COPY_NEUTRAL_ALLELE,
+                                "TEST",
+                                VcfFuncotationMetadata.create(
+                                        Collections.singletonList(
+                                                new VCFInfoHeaderLine(FUNCOTATION_FIELD_1,1, VCFHeaderLineType.String, "Unknown")))
+
+
+                )));
+    }
+
+    @Test(dataProvider = "provideForAliasing")
+    public void testAliasing(final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
+                             final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
+                             final Set<String> excludedOutputFields, final LinkedHashMap<String, List<String>> columnNameToAliasesMap,
+                             final VariantContext segVC, final FuncotationMap funcotationMap,
+                             final List<String> gtAliasKeys, final List<String> gtAliasFuncotationFields, final List<String> gtFinalValues) throws IOException {
+        final File outputFile = File.createTempFile("testAliasing", ".seg");
+        final SimpleTsvOutputRenderer simpleTsvOutputRenderer = new SimpleTsvOutputRenderer(outputFile.toPath(),
+                unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations, excludedOutputFields,
+                columnNameToAliasesMap, "TESTING_VERSION");
+
+        // You must write one record since SimpleTsvOutputRenderer lazy loads the writer.
+        simpleTsvOutputRenderer.write(segVC, funcotationMap);
+
+        // Test that all columns are in the output and the proper aliases are set up.
+        final LinkedHashMap<String, String> columnNameToFuncotationFieldMap = simpleTsvOutputRenderer.getColumnNameToFuncotationFieldMap();
+        Assert.assertEquals(columnNameToFuncotationFieldMap.keySet(), new LinkedHashSet<>(gtAliasKeys));
+        Assert.assertEquals(columnNameToFuncotationFieldMap.values(), new LinkedHashSet<>(gtAliasFuncotationFields));
+
+        // Get the actual values in the columns
+        simpleTsvOutputRenderer.close();
+
+        final List<LinkedHashMap<String, String>> gtOutputRecords = Collections.singletonList(
+                createLinkedHashMapFromLists(gtAliasKeys, gtFinalValues));
+        assertTsvFile(outputFile, gtOutputRecords);
+    }
+
+    private LinkedHashMap<String,String> createLinkedHashMapFromLists(final List<String> keys, final List<String> values) {
+        Assert.assertEquals(keys.size(), values.size());
+        return IntStream.range(0, keys.size()).boxed().collect(Collectors.toMap(i -> keys.get(i),
+                i -> values.get(i), (x1, x2) -> {
+                    throw new IllegalArgumentException("Should not be able to have duplicate field names.");
+                }, LinkedHashMap::new));
+    }
+
+    private LinkedHashMap<String,List<String>> createLinkedHashMapStringToStringList(final List<String> keys, final List<List<String>> values) {
+        Assert.assertEquals(keys.size(), values.size());
+        return IntStream.range(0, keys.size()).boxed().collect(Collectors.toMap(i -> keys.get(i),
+                i -> values.get(i), (x1, x2) -> {
+                    throw new IllegalArgumentException("Should not be able to have duplicate field names.");
+                }, LinkedHashMap::new));
+    }
 }

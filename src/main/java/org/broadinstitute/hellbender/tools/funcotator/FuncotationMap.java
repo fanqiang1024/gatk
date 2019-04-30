@@ -232,8 +232,14 @@ public class FuncotationMap {
         return gencodeFuncotations.size() != new HashSet<>(gencodeFuncotations).size();
     }
 
-    // TODO: Docs
     // TODO: Tests
+    /**
+     * Get all field names found in the funcotations for the given transcript ID.
+     *
+     * @param transcriptId transcript ID.  Never {@code null}
+     * @return Field names in the funcotations.  Empty set if no funcotations (or funcotations have no fields).
+     * Never {@code null}
+     */
     public Set<String> getFieldNames(final String transcriptId) {
         Utils.nonNull(transcriptId);
 
@@ -241,18 +247,25 @@ public class FuncotationMap {
         return funcotations.stream().map(f -> f.getFieldNames()).flatMap(s -> s.stream()).collect(Collectors.toSet());
     }
 
-    // TODO: Docs
-    // TODO: Tests
-    public Set<String> getFieldNames() {
+    /**
+     * See {@link FuncotationMap#getFieldNames(String)}, but this returns field names for all transcripts and all alleles.
+     * @return  See {@link FuncotationMap#getFieldNames(String)}
+     */
+    private Set<String> getFieldNames() {
         final List<String> txIds = getTranscriptList();
         final Set<String> result = new HashSet<>();
         txIds.forEach(txId -> result.addAll(getFieldNames(txId)));
         return result;
     }
 
-    // TODO: Docs
-    // TODO: Tests
-    public Set<String> getFieldNames(final String transcriptId, final Allele allele) {
+    /**
+     * See {@link FuncotationMap#getFieldNames(String)}, but this returns field names for a single transcripts and a
+     *  single allele.
+     * @param transcriptId See {@link FuncotationMap#getFieldNames(String)}
+     * @param allele Never {@code null}
+     * @return See {@link FuncotationMap#getFieldNames(String)}
+     */
+    private Set<String> getFieldNames(final String transcriptId, final Allele allele) {
         Utils.nonNull(transcriptId);
         Utils.nonNull(allele);
 

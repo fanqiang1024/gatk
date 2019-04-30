@@ -13,6 +13,7 @@ import org.apache.logging.log4j.Logger;
 import org.broadinstitute.barclay.utils.Utils;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.tools.funcotator.AliasProvider;
 import org.broadinstitute.hellbender.tools.funcotator.FuncotationMap;
 import org.broadinstitute.hellbender.tools.funcotator.OutputRenderer;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.LocatableFuncotationCreator;
@@ -36,6 +37,9 @@ import java.util.stream.Stream;
  * IMPORTANT:  If this class is not given any command to write(...), the output file will be empty.
  *
  * This class assumes that funcotation maps will have the same fields regardless of allele.
+ *
+ * This class makes no attempt to render VariantContext attribues.  Any VC attributes must be converted into a
+ *  Funcotation (and added to the FuncotationMap) before calling write(...).
  */
 public class SimpleTsvOutputRenderer extends OutputRenderer {
 
@@ -44,11 +48,6 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
 
     private TableWriter<LinkedHashMap<String, String>> writer;
     private boolean isWriterInitialized;
-    /**
-     * Output column names to possible field names, which could appear in the funcotations.
-     */
-    private LinkedHashMap<String, List<String>> columnNameToAliasesMap = new LinkedHashMap<>();
-
 
     private LinkedHashMap<String, String> columnNameToFuncotationFieldMap;
     private Set<String> excludedOutputFields;
@@ -56,11 +55,13 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
     private final LinkedHashMap<String, String> unaccountedForDefaultAnnotations;
     private final LinkedHashMap<String, String> unaccountedForOverrideAnnotations;
 
+    private final AliasProvider aliasProvider;
 
-    private SimpleTsvOutputRenderer(final Path outputFilePath,
+    @VisibleForTesting
+    SimpleTsvOutputRenderer(final Path outputFilePath,
                                    final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
                                    final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
-                                   final Set<String> excludedOutputFields, final Path configPath,
+                                   final Set<String> excludedOutputFields, final LinkedHashMap<String, List<String>> columnNameToAliasesMap,
                                    final String toolVersion) {
         super(toolVersion);
 
@@ -68,13 +69,13 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
         Utils.nonNull(unaccountedForDefaultAnnotations);
         Utils.nonNull(unaccountedForOverrideAnnotations);
         Utils.nonNull(excludedOutputFields);
-        Utils.nonNull(configPath);
+        Utils.nonNull(columnNameToAliasesMap);
         Utils.nonNull(toolVersion);
 
         this.excludedOutputFields = excludedOutputFields;
         this.outputFilePath = outputFilePath;
-        isWriterInitialized = false;
-        columnNameToAliasesMap = createColumnNameToAliasesMap(configPath);
+        this.isWriterInitialized = false;
+        this.aliasProvider = new AliasProvider(columnNameToAliasesMap);
 
         this.unaccountedForDefaultAnnotations = unaccountedForDefaultAnnotations;
         this.unaccountedForOverrideAnnotations = unaccountedForOverrideAnnotations;
@@ -85,7 +86,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
         final TableColumnCollection columns = new TableColumnCollection(columnNames);
         try {
             writer = TableUtils.writer(outputFilePath, columns, (map, dataLine) -> {
-                map.keySet().forEach(k -> dataLine.append(map.get(k)));
+                map.keySet().forEach(k -> dataLine.set(k, map.get(k)));
             });
         } catch (final IOException ioe) {
             throw new GATKException("Could not open the simple TSV writer.", ioe);
@@ -99,7 +100,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
             // Initialize the writer (so that we can write column names and do not just produce a blank file when
             //  write was never called).
             if (!isWriterInitialized) {
-                initializeWriter(new ArrayList<>(columnNameToAliasesMap.keySet()));
+                initializeWriter(new ArrayList<>(aliasProvider.getFields()));
             }
             if (writer != null) {
                 writer.close();
@@ -132,7 +133,8 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
         if (!isWriterInitialized) {
             // Developer note:  the "get(0)" is okay, since we know that all transcript-allele combinations have the same fields.
             // Note that columnNameToFuncotationFieldMap will also hold the final say for what columns will get rendered in the end.
-            columnNameToFuncotationFieldMap = createColumnNameToFieldNameMap(columnNameToAliasesMap, txToFuncotationMap, txToFuncotationMap.getTranscriptList().get(0), excludedOutputFields);
+            columnNameToFuncotationFieldMap = createColumnNameToFieldNameMap(txToFuncotationMap, txToFuncotationMap.getTranscriptList().get(0), excludedOutputFields,
+                    unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations);
             initializeWriter(new ArrayList<>(columnNameToFuncotationFieldMap.keySet()));
         }
         try {
@@ -149,25 +151,36 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
         }
     }
 
-    private static LinkedHashMap<String, String> createColumnNameToFieldNameMap(final LinkedHashMap<String, List<String>> columnNameToAliasMap,
-                                                                            final FuncotationMap txToFuncotationMap, final String txId, final Set<String> excludedFields) {
-        final LinkedHashMap<String, String> result = columnNameToAliasMap.entrySet().stream()
-                .map(e -> createAliasList(columnNameToAliasMap, e.getKey()))
-                .map(candidates -> Pair.of(candidates.get(0), findFieldNameInFuncotations(candidates, txToFuncotationMap, txId)))
-                .collect(Collectors.toMap(p -> p.getLeft(), p -> p.getRight(),
-                        (x1, x2) -> {
-                            throw new IllegalArgumentException("Should not be able to have duplicate field names."); },
-                        LinkedHashMap::new ));
+    // Creates a list of desired output fields and a mapping to fields that exist in the funcotations.  Also, applies excluded fields and adds placeholders for .
+    private LinkedHashMap<String, String> createColumnNameToFieldNameMap(final FuncotationMap funcotationMap, final String txId, final Set<String> excludedFields,
+                                                                         final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
+                                                                         final LinkedHashMap<String, String> unaccountedForOverrideAnnotations) {
+        final LinkedHashMap<String, String> result = aliasProvider.createColumnNameToFieldNameMap(funcotationMap, txId);
+
 
         // Now lets find the columns that are left over and tack those on with their base name.
-        final Set<String> leftoverColumns = Sets.difference(txToFuncotationMap.getFieldNames(txId), new HashSet<>(result.values()));
-        final List<String> leftoverColumnsAsList = leftoverColumns.stream().sorted().collect(Collectors.toList());
-        leftoverColumnsAsList.forEach(c -> result.put(c, c));
+        final Set<String> allFuncotationFields = funcotationMap.getFieldNames(txId);
+        final Set<String> usedFuncotationFields =  new HashSet<>(result.values());
+        getLeftoverStrings(allFuncotationFields, usedFuncotationFields).forEach(c -> result.put(c, c));
+
+
+        // Make a placeholder for leftover default values
+        getLeftoverStrings(unaccountedForDefaultAnnotations.keySet(), new HashSet<>(result.keySet()))
+                .forEach(c -> result.put(c, c));
+
+        // Make a placeholder for leftover override values
+        getLeftoverStrings(unaccountedForOverrideAnnotations.keySet(), new HashSet<>(result.keySet()))
+                .forEach(c -> result.put(c, c));
 
         // Remove the excluded columns
         excludedFields.forEach(e -> result.remove(e));
 
         return result;
+    }
+
+    private List<String> getLeftoverStrings(final Set<String> superset, final Set<String> usedFuncotationFields) {
+        final Set<String> leftoverColumns = Sets.difference(superset, usedFuncotationFields);
+        return leftoverColumns.stream().sorted().collect(Collectors.toList());
     }
 
     /**
@@ -176,13 +189,15 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
      *  and a map of funcotation field name
      *
      * @param columnNameToFieldMap Mapping from the output column name to the funcotation field name in the map.
+     *                             Should be generated from
+     *                             {@link SimpleTsvOutputRenderer#createColumnNameToFieldNameMap(FuncotationMap, String, Set, LinkedHashMap, LinkedHashMap)}
      * @param funcotationMap a funcotation map from which to extract values
      * @param txId transcript to use
      * @param allele alternate allele to use
      * @param unaccountedDefaultAnnotations default values that are not already represented in the funcotation map.
      * @param unaccountedOverrideAnnotations override values that are not already represented in the funcotation map.
      * @param excludedFields Names of columns to exclude when creating a final map from column name to the value.
-     * @return Column names to value mapping.
+     * @return Column names to value mapping.  Keys will match the input columnNameToFieldMap.
      */
     private static LinkedHashMap<String, String> createColumnNameToValueMap(final LinkedHashMap<String, String> columnNameToFieldMap,
                                                                       final FuncotationMap funcotationMap, final String txId, final Allele allele,
@@ -198,6 +213,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
         //  Note that this will overwrite the defaults specified in the default annotations.
         columnNameToFieldMap.entrySet().stream()
                 .filter(e -> !excludedFields.contains(e.getKey()))
+                .filter(colEntry -> funcotationMap.getFieldValue(txId, colEntry.getValue(), allele) != null)
                 .map(colEntry -> Pair.of(colEntry.getKey(), funcotationMap.getFieldValue(txId, colEntry.getValue(), allele)))
                 .forEach(p -> result.put(p.getLeft(), p.getRight()));
 
@@ -206,39 +222,6 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
                 .filter(e -> !excludedFields.contains(e.getKey()))
                 .forEach(e -> result.put(e.getKey(), e.getValue()));
 
-        return result;
-    }
-
-    /**
-     * Search the given funcotations (derived from the funoctation map and transcript key) for the first field that
-     *  appears in the candidate field name list.
-     *
-     * Notes:
-     * - Candidate field names should be listed in order of priority, since this method will return the first match.
-     * - This method assumes that the funcotation map has the same fields regardless of allele.
-     *
-     * @param candidateFieldNames field names to find in priority order.  Never {@code null}
-     * @param txToFuncotationMap {@link FuncotationMap} to search for field names.  Never {@code null}
-     * @param txId transcript ID to use in the search.   Never {@code null}
-     * @return the first candidate field name found in the funcotation map.
-     *  Returns empty string ("") if nothing is found.
-     */
-    private static String findFieldNameInFuncotations(final List<String> candidateFieldNames, final FuncotationMap txToFuncotationMap, final String txId) {
-        Utils.nonNull(candidateFieldNames);
-        Utils.nonNull(txToFuncotationMap);
-        Utils.nonNull(txId);
-
-        final Set<String> funcotationFieldNames = txToFuncotationMap.getFieldNames(txId);
-        return candidateFieldNames.stream()
-                .filter(funcotationFieldNames::contains)
-                .findFirst().orElse("");
-    }
-
-    // Make sure that the column name itself is at the front of the alias list.
-    private static List<String> createAliasList(final LinkedHashMap<String, List<String>> columnNameToAliasMap, final String columnName) {
-        final List<String> result = new ArrayList<>();
-        result.add(columnName);
-        result.addAll(columnNameToAliasMap.get(columnName));
         return result;
     }
 
@@ -284,7 +267,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
                                                          final Set<String> excludedOutputFields, final Path configPath,
                                                          final String toolVersion) {
         return new SimpleTsvOutputRenderer(outputFilePath, unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations,
-                excludedOutputFields, configPath, toolVersion);
+                excludedOutputFields, createColumnNameToAliasesMap(configPath), toolVersion);
     }
 
     /**
@@ -306,7 +289,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
                                                          final String toolVersion) {
         try {
             return new SimpleTsvOutputRenderer(outputFilePath, unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations,
-                    excludedOutputFields, Resource.getResourceContentsAsFile(resourcePath.toString()).toPath(), toolVersion);
+                    excludedOutputFields, createColumnNameToAliasesMap(Resource.getResourceContentsAsFile(resourcePath.toString()).toPath()), toolVersion);
         } catch (final IOException ioe) {
             throw new GATKException.ShouldNeverReachHereException("Could not read config file: " + resourcePath,
                     ioe);
@@ -316,5 +299,10 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
     @VisibleForTesting
     static String[] splitAndTrim( String text, String separator ) {
         return Stream.of(StringUtils.split(text, separator)).map(s -> s.trim()).toArray(String[]::new);
+    }
+
+    @VisibleForTesting
+    LinkedHashMap<String, String> getColumnNameToFuncotationFieldMap() {
+        return columnNameToFuncotationFieldMap;
     }
 }
