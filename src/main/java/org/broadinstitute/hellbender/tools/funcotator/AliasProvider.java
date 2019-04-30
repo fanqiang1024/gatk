@@ -76,8 +76,19 @@ public class AliasProvider {
                 .findFirst().orElse("");
     }
 
-    // TODO: Docs (incl. note that funcotation fields that are not in this alias provider are dropped).
     // TODO: Tests
+
+    /**
+     * Create a mapping that links the fields of this alias provider to the funcotation fields in the given
+     *  {@link FuncotationMap}.
+     *
+     * @param txToFuncotationMap Never {@code null}
+     * @param txId Transcript ID.  Never {@code null}
+     * @return A mapping of the fields in this alias provider to the funcotation fields contained in the FuncotationMap,
+     * transcript ID pairing.  The keys will be the same keys from the alias map that this instance was initialized with.
+     * Value for a given key will be empty string ("") if no matching funcotation field exists.
+     * Never {@code null}
+     */
     public LinkedHashMap<String, String> createColumnNameToFieldNameMap(final FuncotationMap txToFuncotationMap, final String txId) {
         return aliasMap.keySet().stream()
                 .map(k -> Pair.of(k, findFieldNameInFuncotations(k, txToFuncotationMap, txId)))
