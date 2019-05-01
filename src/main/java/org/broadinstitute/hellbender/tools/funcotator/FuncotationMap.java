@@ -177,7 +177,8 @@ public class FuncotationMap {
      *
      * @return Never {@code null}
      */
-    public LinkedHashSet<String> getTranscriptSet() {
+    @VisibleForTesting
+    LinkedHashSet<String> getTranscriptSet() {
         return new LinkedHashSet<>(txToFuncotations.keySet());
     }
 
@@ -277,15 +278,21 @@ public class FuncotationMap {
                 .flatMap(s -> s.stream()).collect(Collectors.toSet());
     }
 
-    //TODO: Docs
-    //TODO:Tests
+    /**
+     * Get all the alleles in all of the funcotations for a given transcript ID.
+     *
+     * @param transcriptId Never {@code null}
+     * @return a set of alleles that are contained in all funcotations associated with the given transcriptId.  Never {@code null}
+     * Will return empty list if there are no funcotations associated with the given transcriptId.
+     */
     public Set<Allele> getAlleles(final String transcriptId) {
         final LinkedHashSet<Funcotation> funcotations =  txToFuncotations.getOrDefault(transcriptId, new LinkedHashSet<>());
         return funcotations.stream().map(f -> f.getAltAllele()).collect(Collectors.toSet());
     }
 
-    //TODO: Docs
-    //TODO:Tests
+    /**
+     * @return whether all transcript-allele combinations have the same fields in the corresponding funcotations.
+     */
     public boolean doAllTxAlleleCombinationsHaveTheSameFields() {
 
         // First get every field seen in this funcotation map.
