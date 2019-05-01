@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
+import com.google.common.annotations.VisibleForTesting;
 import htsjdk.variant.variantcontext.Allele;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -90,7 +91,8 @@ public class FuncotationMap {
     /**
      * @return An empty FuncotationMap.  Never {@code null}
      */
-    private static FuncotationMap createEmpty() {
+    @VisibleForTesting
+    static FuncotationMap createEmpty() {
         return new FuncotationMap();
     }
 
@@ -232,7 +234,6 @@ public class FuncotationMap {
         return gencodeFuncotations.size() != new HashSet<>(gencodeFuncotations).size();
     }
 
-    // TODO: Tests
     /**
      * Get all field names found in the funcotations for the given transcript ID.
      *
