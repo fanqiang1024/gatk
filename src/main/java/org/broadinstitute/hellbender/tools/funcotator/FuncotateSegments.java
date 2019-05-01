@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
 public class FuncotateSegments extends FeatureWalker<AnnotatedInterval> {
     private static final Logger logger = LogManager.getLogger(FuncotateSegments.class);
     @Argument(
-            doc = "Input segment file (tab-separated values).",
+            doc = "Input segment file (tab-separated values).  Must have a call column.",
             fullName = CopyNumberStandardArgument.SEGMENTS_FILE_LONG_NAME
     )
     private File segmentFile;

@@ -4,6 +4,7 @@ import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.variantcontext.VariantContextBuilder;
 import htsjdk.variant.vcf.VCFConstants;
+import org.broadinstitute.hdf5.Utils;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.tools.copynumber.formats.records.CalledCopyRatioSegment;
@@ -15,13 +16,14 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * TODO: Docs
- * TODO: Document that we use a symbolic allele for the copy neutral situation
+ * Converts an annotated interval representing a segment to a variant context.
  */
 public class AnnotatedIntervalToSegmentVariantContextConverter {
     private AnnotatedIntervalToSegmentVariantContextConverter() {}
 
-    // TODO: Get rid of magic constants.
+    /**
+     * Field names that will be accepted as a call
+     */
     final static List<String> callAnnotationNames = Arrays.asList(
             "CALL","Segment_Call","Call"
     );
@@ -30,13 +32,22 @@ public class AnnotatedIntervalToSegmentVariantContextConverter {
     public final static Allele COPY_NEUTRAL_ALLELE = Allele.create(COPY_NEUTRAL_ALLELE_STRING);
 
     /**
-     * TODO: Docs
      * TODO: Test
-     * @param segment
-     * @param referenceContext
-     * @return
+     * Convert a segment (as annotated interval) to a {@link VariantContext}.  The variant context will have a ref allele
+     *  of the starting base of the segment.  The end position will be in the attribute {@link VCFConstants#END_KEY}.
+     *  Any remaining annotations in the annotated interval will be converted to string attributes.  The segment call
+     *  will be the alternate allele.  Currently, the alternate allele will be one of neutral, amplification, or deletion.
+     *
+     * The variant context will use symbolic alleles for the calls (copy neutral, amplification, or deletion).
+     * See {@link CalledCopyRatioSegment.Call} for insertions and and deletions.
+     *
+     * @param segment Never {@code null}
+     * @param referenceContext Never {@code null}
+     * @return Never {@code null}
      */
     public static VariantContext convert(final AnnotatedInterval segment, final ReferenceContext referenceContext) {
+        Utils.nonNull(segment);
+        Utils.nonNull(referenceContext);
         final SimpleInterval startPointInterval = new SimpleInterval(segment.getContig(), segment.getStart(), segment.getStart());
         final Allele refAlleleAtStart = Allele.create(referenceContext.getBases(startPointInterval), true);
 
@@ -70,7 +81,6 @@ public class AnnotatedIntervalToSegmentVariantContextConverter {
         return CalledCopyRatioSegment.Call.NEUTRAL;
     }
 
-    // TODO: Document the assumption that copy neutral is being handled in the genotyping
     private static Allele convertActualSegCallToAllele(final CalledCopyRatioSegment.Call call) {
         switch (call) {
             case DELETION:

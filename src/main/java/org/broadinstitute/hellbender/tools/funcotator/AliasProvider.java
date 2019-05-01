@@ -76,8 +76,6 @@ public class AliasProvider {
                 .findFirst().orElse("");
     }
 
-    // TODO: Tests
-
     /**
      * Create a mapping that links the fields of this alias provider to the funcotation fields in the given
      *  {@link FuncotationMap}.

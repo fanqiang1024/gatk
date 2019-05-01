@@ -49,7 +49,7 @@ public class AliasProviderUnitTest extends GATKBaseTest {
                     ),
                     FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY,
                     FuncotatorUtils.createLinkedHashMapFromLists(Collections.singletonList("FOO"), Collections.singletonList("BAZ2"))
-                } ,{
+                },{
                     // No alias found (returned alias should be empty string)
                     FuncotatorUtils.createLinkedHashMapFromLists(Collections.singletonList("FOO"), Collections.singletonList(Arrays.asList("XXX", "YYY", "ZZZ"))),
                     FuncotationMap.createNoTranscriptInfo(
@@ -57,6 +57,14 @@ public class AliasProviderUnitTest extends GATKBaseTest {
                     ),
                     FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY,
                     FuncotatorUtils.createLinkedHashMapFromLists(Collections.singletonList("FOO"), Collections.singletonList(""))
+                },{
+                    // Multiple aliases
+                    FuncotatorUtils.createLinkedHashMapFromLists(Arrays.asList("FIELD1", "FIELD2"), Arrays.asList(Arrays.asList("XXX", "GUZ2", "ZZZ"), Arrays.asList("BAZ", "BBB", "CCC"))),
+                    FuncotationMap.createNoTranscriptInfo(
+                            createDummyTestFuncotations()
+                    ),
+                    FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY,
+                    FuncotatorUtils.createLinkedHashMapFromLists(Arrays.asList("FIELD1", "FIELD2"), Arrays.asList("GUZ2", "BAZ"))
                 }
         };
     }
