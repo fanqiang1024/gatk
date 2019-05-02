@@ -2179,11 +2179,13 @@ public final class FuncotatorUtils {
     }
 
     /**
-     * TODO: Docs
-     * @param vc
-     * @param metadata
-     * @param datasourceName
-     * @return
+     * Use the given metadata to create funcotations from a variant context attributes (and alt alleles)
+     * @param vc Never {@code null}
+     * @param metadata Fields that should be present in the funcotations.  Never {@code null}
+     * @param datasourceName Name to appear in all funcotations.  Never {@code null}
+     * @return Instances of {@link Funcotation} for each field in the metadata x alternate allele in the variant context.
+     * If a field is not present in the variant context attributes, the field will ave value empty string ("") in all output
+     * funcotations.  Fields will be the same names and values for each alternate allele in the funcotations.
      */
     public static List<Funcotation> createFuncotationsFromMetadata(final VariantContext vc, final FuncotationMetadata metadata, final String datasourceName) {
 

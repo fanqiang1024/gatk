@@ -181,7 +181,6 @@ public final class FuncotatorEngine implements AutoCloseable {
     }
 
     /**
-     * TODO: Tests
      * Creates a {@link FuncotationMap} for the given {@code variantContext} using the datasources initialized with this
      *  engine.
      *

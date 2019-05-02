@@ -2216,7 +2216,7 @@ public class FuncotatorUtilsUnitTest extends GATKBaseTest {
     }
 
     @DataProvider
-    public Object[][] provideCreateFuncotationsFromVariantContext() {
+    public Object[][] provideCreateFuncotationsFromMetadata() {
         final Map<String, String> attributes1 = ImmutableMap.of("FOOFIELD", "FOO", "BAZFIELD", "BAZ");
         final List<VCFInfoHeaderLine> attributes1AsVcfHeaderLine = attributes1.keySet().stream()
                 .map(k -> new VCFInfoHeaderLine(k, VCFHeaderLineCount.A, VCFHeaderLineType.String, "Description here"))
@@ -2252,8 +2252,8 @@ public class FuncotatorUtilsUnitTest extends GATKBaseTest {
         };
     }
 
-    @Test(dataProvider = "provideCreateFuncotationsFromVariantContext")
-    public void testCreateFuncotationsFromVariantContext(final VariantContext vc, final FuncotationMetadata metadata, final String datasourceName) {
+    @Test(dataProvider = "provideCreateFuncotationsFromMetadata")
+    public void testCreateFuncotationsFromMetadata(final VariantContext vc, final FuncotationMetadata metadata, final String datasourceName) {
         final List<Funcotation> funcotations = FuncotatorUtils.createFuncotationsFromMetadata(vc, metadata, datasourceName);
 
         Assert.assertTrue(funcotations.stream().allMatch(f -> f.getDataSourceName().equals(datasourceName)));
