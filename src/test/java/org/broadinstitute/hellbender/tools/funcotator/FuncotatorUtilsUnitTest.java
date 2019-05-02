@@ -2346,4 +2346,49 @@ public class FuncotatorUtilsUnitTest extends GATKBaseTest {
     public void testSanitizeFuncotationFieldForVcf(final String input, final String expected) {
         Assert.assertEquals( FuncotatorUtils.sanitizeFuncotationFieldForVcf(input), expected );
     }
+
+    @DataProvider
+    public Object[][] provideCreateLinkedHashMapFromLists() {
+        final LinkedHashMap<String,String> gtMap1 = new LinkedHashMap<>();
+        gtMap1.put("K1", "V1");
+        gtMap1.put("K2", "V2");
+        final LinkedHashMap<Allele,Allele> gtMap2 = new LinkedHashMap<>();
+        gtMap2.put(Allele.create("C"), Allele.create("G"));
+        gtMap2.put(Allele.create("T"), Allele.create("A"));
+
+        return new Object[][] {
+                {Arrays.asList("K1", "K2"), Arrays.asList("V1", "V2"), gtMap1},
+                {Arrays.asList(Allele.create("C"), Allele.create("T")), Arrays.asList(Allele.create("G"), Allele.create("A")), gtMap2}
+        };
+    }
+
+
+    @Test(dataProvider = "provideCreateLinkedHashMapFromLists")
+    public <T,U> void testCreateLinkedHashMapFromLists(final List<T> keys, final List<U> values, final LinkedHashMap<T, U> gtMap) {
+        final LinkedHashMap<T, U> guess = FuncotatorUtils.createLinkedHashMapFromLists(keys, values);
+        Assert.assertEquals(guess, gtMap);
+    }
+
+    @DataProvider
+    public Object[][] provideCreateLinkedHashMapFromListsWithIllegalArgs() {
+        return new Object[][] {
+                // Lengths don't match
+                {Arrays.asList("K1", "K2"), Collections.singletonList("V1")},
+                {Arrays.asList("K1", "K2"), Arrays.asList("V1", "V2", "V3")},
+                {Arrays.asList("K1", "K2"), Collections.emptyList()},
+                {Collections.singletonList("K1"), Arrays.asList("V1", "V2")},
+                {Arrays.asList("K1", "K2", "K3"), Arrays.asList("V1", "V2")},
+                {Collections.emptyList(), Arrays.asList("V1", "V2")},
+                // Duplicate keys
+                {Arrays.asList("K1", "K2", "K1"), Arrays.asList("V1", "V2", "V3")},
+                // Duplicate keys, even if the value is the same.  LinkedHashMap implies an ordering, which falls
+                //  apart if keys are not unique.
+                {Arrays.asList("K1", "K2", "K1"), Arrays.asList("V1", "V2", "V1")}
+        };
+    }
+    @Test(dataProvider = "provideCreateLinkedHashMapFromListsWithIllegalArgs",
+            expectedExceptions = IllegalArgumentException.class)
+    public void testCreateLinkedHashMapFromListsWithIllegalArgs(final List<String> keys, final List<String> values) {
+        FuncotatorUtils.createLinkedHashMapFromLists(keys, values);
+    }
 }

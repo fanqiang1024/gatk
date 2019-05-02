@@ -154,7 +154,6 @@ public class FuncotateSegments extends FeatureWalker<AnnotatedInterval> {
             }
         }
 
-
         // Force the final output to have the same contig convention as the input.
         final VariantContext finalVC = new VariantContextBuilder(segmentVariantContext)
                 .chr(segment.getContig())

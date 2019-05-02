@@ -2244,7 +2244,7 @@ public final class FuncotatorUtils {
         UNSPECIFIED;
     }
 
-    /** TODO: Test
+    /**
      * Create a linked hash map from two lists with corresponding values.
      * @param keys Never {@code null}.  Length must be the same as values.
      * @param values Never {@code null}.  Length must be the same as keys.

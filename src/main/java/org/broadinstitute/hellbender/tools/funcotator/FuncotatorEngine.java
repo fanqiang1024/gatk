@@ -180,16 +180,17 @@ public final class FuncotatorEngine implements AutoCloseable {
         return funcotationMap;
     }
 
-    /** //TODO: Update docs
+    /**
      * TODO: Tests
-     * Creates a {@link FuncotationMap} for the given {@code variantContext}.
+     * Creates a {@link FuncotationMap} for the given {@code variantContext} using the datasources initialized with this
+     *  engine.
      *
      * @param segmentAsVariantContext   {@link VariantContext} to annotate.  Never {@code null}.
      * @param referenceContext {@link ReferenceContext} corresponding to the given {@code variantContext}.  Never {@code null}.
      * @param featureContext {@link FeatureContext} corresponding to the given {@code variantContext}.  Never {@code null}.
      * @return an instance of FuncotationMap that maps transcript IDs to lists of funcotations for the given variantContext context.
      */
-    public FuncotationMap createFuncotationMapForSegment(final VariantContext segmentAsVariantContext,
+     FuncotationMap createFuncotationMapForSegment(final VariantContext segmentAsVariantContext,
                                                          final ReferenceContext referenceContext,
                                                          final FeatureContext featureContext) {
 
@@ -217,14 +218,14 @@ public final class FuncotatorEngine implements AutoCloseable {
 
     /**
      * Create an output renderer for the data created by this instance of {@link FuncotatorEngine}.
-     * @param annotationDefaultsMap {@link LinkedHashMap<String, String>} of annotation names and their default values.
-     * @param annotationOverridesMap {@link LinkedHashMap<String, String>} of annotation names and the values for these fields overridden by the user.
+     * @param annotationDefaultsMap {@link LinkedHashMap<String,String>} of annotation names and their default values.
+     * @param annotationOverridesMap {@link LinkedHashMap<String,String>} of annotation names and the values for these fields overridden by the user.
      * @param headerForVariants {@link VCFHeader} for the input VCF file containing the variants to annotate.
      * @param defaultToolVcfHeaderLines {@link Set<VCFHeaderLine>} containing the default {@link VCFHeaderLine}s for the given {@code gatkToolInstance}.
      * @param gatkToolInstance {@link GATKTool} instance from which we will be using this {@link FuncotatorEngine}.
      * @return The requested {@link OutputRenderer} based on the given {@code funcotatorArgs}.
      */
-    public OutputRenderer createOutputRenderer(final LinkedHashMap<String, String> annotationDefaultsMap,
+    OutputRenderer createOutputRenderer(final LinkedHashMap<String, String> annotationDefaultsMap,
                                                final LinkedHashMap<String, String> annotationOverridesMap,
                                                final VCFHeader headerForVariants,
                                                final Set<VCFHeaderLine> defaultToolVcfHeaderLines,
