@@ -397,7 +397,7 @@ public class SimpleKeyXsvFuncotationFactoryUnitTest extends GATKBaseTest {
         }
     }
 
-    @Test(expectedExceptions = GATKException.ShouldNeverReachHereException.class)
+    @Test
     public void testNoSupportOfSegments() {
         final SimpleKeyXsvFuncotationFactory factory = new SimpleKeyXsvFuncotationFactory(
                 defaultName,
@@ -410,7 +410,6 @@ public class SimpleKeyXsvFuncotationFactoryUnitTest extends GATKBaseTest {
 
         Assert.assertFalse(factory.isSupportingSegmentFuncotation());
         Assert.assertEquals(factory.getSupportedFuncotationFieldsForSegments(), Collections.emptyList());
-        final List<Funcotation> funcotations = factory.createFuncotationsOnSegment(defaultVariantContext, defaultReferenceContext, Collections.emptyList());
     }
 
     /*

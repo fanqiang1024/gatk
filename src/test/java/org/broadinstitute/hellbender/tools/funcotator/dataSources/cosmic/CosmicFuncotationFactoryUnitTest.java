@@ -286,13 +286,11 @@ public class CosmicFuncotationFactoryUnitTest extends GATKBaseTest {
         );
     }
 
-    @Test(expectedExceptions = GATKException.ShouldNeverReachHereException.class)
+    @Test
     public void testNoSupportOfSegments() {
         final CosmicFuncotationFactory factory = new CosmicFuncotationFactory(PATH_TO_TEST_DB);
 
         Assert.assertFalse(factory.isSupportingSegmentFuncotation());
         Assert.assertEquals(factory.getSupportedFuncotationFieldsForSegments(), Collections.emptyList());
-        final List<Funcotation> funcotations = factory.createFuncotationsOnSegment(
-                defaultVariantContext, defaultReferenceContext, Collections.emptyList());
     }
 }

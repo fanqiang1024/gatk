@@ -13,7 +13,6 @@ import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.GencodeFuncotation;
 import org.broadinstitute.hellbender.tools.spark.sv.discovery.SimpleSVType;
-import org.broadinstitute.hellbender.utils.variant.GATKVariantContextUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 
 import java.io.Closeable;
@@ -361,22 +360,23 @@ public abstract class DataSourceFuncotationFactory implements Closeable {
         return false;
     }
 
-    /** TODO: Docs
-     *
-     * @param segmentVariantContext
-     * @param referenceContext
-     * @param featureList
-     * @return
+    /**
+     * Sublclasses that support annotating segments should override this method to create funcotations for segments.
+     * Additionally, those subclasses should override
+     *  {@link DataSourceFuncotationFactory#isSupportingSegmentFuncotation()} to return true.
      */
-    public List<Funcotation> createFuncotationsOnSegment(final VariantContext segmentVariantContext,
+    protected List<Funcotation> createFuncotationsOnSegment(final VariantContext segmentVariantContext,
                                                          final ReferenceContext referenceContext,
                                                          final List<Feature> featureList) {
         throw new GATKException.ShouldNeverReachHereException("This funcotation factory does not support the annotation of segments.");
     }
 
-    // TODO: Docs
-    // TODO: Tests
-    public static boolean isSegmentVariantContext(final VariantContext vc) {
+    /**
+     * @param vc Never {@code null}
+     * @return Boolean whether the given variant context represent a copy number segment.
+     */
+    protected static boolean isSegmentVariantContext(final VariantContext vc) {
+        Utils.nonNull(vc);
         for (final Allele a: vc.getAlternateAlleles()) {
             final String representation = a.getDisplayString();
             if (Stream.of(SimpleSVType.SupportedType.values()).anyMatch(s -> SimpleSVType.createBracketedSymbAlleleString(s.toString()).equals(representation))) {
