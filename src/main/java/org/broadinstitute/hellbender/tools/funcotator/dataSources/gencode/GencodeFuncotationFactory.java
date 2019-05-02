@@ -19,6 +19,7 @@ import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.engine.ReferenceDataSource;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.tools.copynumber.utils.annotatedinterval.AnnotatedInterval;
 import org.broadinstitute.hellbender.tools.funcotator.*;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.TableFuncotation;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.segment.SegmentExonUtils;
@@ -2773,7 +2774,11 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
     }
 
 
-    // TODO: Docs
+    /**
+     * Return the metadata for segment annotations.
+     *
+     * @return Never {@code null}
+     */
     private FuncotationMetadata createSegmentFuncotationMetadata() {
         return VcfFuncotationMetadata.create(
                 Arrays.asList(
@@ -2794,11 +2799,14 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
     }
 
     /**
-     * TODO: Docs
-     * @param segmentVariantContext
-     * @param referenceContext
-     * @param gencodeGtfGeneFeaturesAsFeatures These must be GencodeGeneGtfFeatures.  Assumed to overlap the entire segment, not just the endpoints.
-     * @return
+     * Create Funcotations for a given segment variant context.  Will not support the {@link TranscriptSelectionMode#ALL} mode,
+     * since that is undefined for segment annotations.
+     *
+     * @param segmentVariantContext Should be created with {@link AnnotatedIntervalToSegmentVariantContextConverter#convert(AnnotatedInterval, ReferenceContext)},
+     *                              since this will adhere to some assumed conventions.  Never {@code null}
+     * @param referenceContext Never {@code null}
+     * @param gencodeGtfGeneFeaturesAsFeatures These must be GencodeGeneGtfFeatures.  Assumed to overlap the entire segment, not just the endpoints.  Never {@code null}
+     * @return Newly created funcotations for Gencode information on the segment.  Never {@code null}
      */
     @Override
     public List<Funcotation> createFuncotationsOnSegment(final VariantContext segmentVariantContext, final ReferenceContext referenceContext, final List<Feature> gencodeGtfGeneFeaturesAsFeatures) {

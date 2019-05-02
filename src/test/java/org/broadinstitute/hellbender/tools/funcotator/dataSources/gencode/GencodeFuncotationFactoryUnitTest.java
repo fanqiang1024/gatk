@@ -1359,8 +1359,6 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
         // We know the first gene is the right one - the gene in question is the MUC16 gene:
         final GencodeGtfGeneFeature gene = (GencodeGtfGeneFeature) gtfFeatureIterator.next();
         final ReferenceContext referenceContext = new ReferenceContext(refDataSourceHg19Ch19, variantInterval );
-
-        // TODO: Make this an input argument:
         final Set<String> requestedTranscriptIds = getValidTranscriptsForGene("MUC16");
 
         // Create a factory for our funcotations:
@@ -1900,8 +1898,8 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
                         )
                         .make(), "CNTN4,CNTN4-AS1"},
 
-                // Three genes found.  Note sorting is alphabetical, not order seen in the genome.
-                //TODO: Is sorting alphabetical or by genomic region?  May have to check oncotator.
+                // Three genes found.  Note sorting is alphabetical, not order seen in the genome.  This is how users
+                //  expect it.
                 {new VariantContextBuilder()
                         .chr("chr3").start(2100000).stop(3200000)
                         .attribute(VCFConstants.END_KEY, 3200000)
