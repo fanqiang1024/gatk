@@ -2,6 +2,7 @@ package org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode;
 
 import htsjdk.tribble.annotation.Strand;
 import org.broadinstitute.hellbender.tools.funcotator.FuncotatorTestConstants;
+import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.codecs.gencode.*;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
@@ -404,25 +405,47 @@ public class DataProviderForExampleGencodeGtfGene {
     }
 
     /**
-     *  Creates a single transcript for the resulting gene.
+     *  Creates a test gencode gene.  This gene has only one transcript.
      *
-     *  Note that the UTRs are attached to the exons.
-     *  TODO: Finish docs
-     * @param contig
-     * @param start
-     * @param geneName
-     * @param codingDirection
-     * @param numExons
-     * @param length5Utr
-     * @param length3Utr
-     * @return
+     *  The transcript will be as follows:
+     *   [ 5'UTR + exon1 ] [ intron ] [ exon2 ] [ intron ] [ exon3 ].... [ exonN + 3'UTR ]
+     *
+     *  So the first exon will have length of (lengthExons + length5Utr) and the last exon will have length
+     *   (lengthExons + length3Utr)
+     *
+     *  Notes:
+     *  - The UTRs are attached to the exons.
+     *  - There are no checks that you have given valid position values for the given contigs.
+     *
+     * @param contig Never {@code null}
+     * @param start start position of the transcript.  Must be >= 0.
+     * @param geneName Arbitrary string.  No checks for realism are performed.  Never {@code null}
+     * @param codingDirection Never {@code null}
+     * @param numExons Number of exons in the transcript.  Must be >= 2.
+     * @param length5Utr The length, in bp, of the 5'UTR in the first exon.  This length is appended to the exon.  So if
+     *                   exonLength is 5 and this parameter is 10, the total length of the first exon will be 15.
+     *                   Must be >= 0.
+     * @param length3Utr The length, in bp, of the 3'UTR in the first exon.  This length is appended to the exon.  So if
+     *                   exonLength is 5 and this parameter is 10, the total length of the last exon will be 15.
+     *                   Must be >= 0.
+     * @param lengthExons Length of each exon in bp.  Must be >= 1.
+     * @param lengthIntrons Length of each intron in bp,  Must be >= 1.
+     * @return the test gene as a {@link GencodeGtfGeneFeature}.  Never {@code null}
      */
     public static GencodeGtfGeneFeature dynamicallyCreateTestGencodeGtfGeneFeature(final String contig, final int start,
                                                                                     final String geneName,
                                                                                     final Strand codingDirection,
                                                                                     final int numExons, final int length5Utr,
                                                                                     final int length3Utr, final int lengthExons, final int lengthIntrons) {
-        ParamUtils.isPositive(numExons, "Number of exons must be >= 1");
+        Utils.nonNull(contig);
+        Utils.nonNull(geneName);
+        Utils.nonNull(codingDirection);
+        Utils.validateArg(numExons >= 2, "Number of exons must be >= 2");
+        ParamUtils.isPositiveOrZero(start, "start position be >= 0");
+        ParamUtils.isPositiveOrZero(length5Utr, "length of 5 prime UTR must be >= 0");
+        ParamUtils.isPositiveOrZero(length3Utr, "length of 3 prime UTR must be >= 0");
+        ParamUtils.isPositive(lengthExons, "Each exon must have a length >= 1");
+        ParamUtils.isPositive(lengthIntrons, "Each intron must have a length >= 1");
         final int totalLength = length3Utr + length5Utr + (lengthExons * numExons) + (lengthIntrons * (numExons - 1));
 
         final AtomicInteger featureOrderNum = new AtomicInteger(1);

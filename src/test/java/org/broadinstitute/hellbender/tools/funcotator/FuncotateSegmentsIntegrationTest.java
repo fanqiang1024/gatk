@@ -26,6 +26,7 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
     private static final String SIMPLE_TEST_FILE = TEST_SUB_DIR + "simple.seg";
     private static final String SIMPLE_TEST_CNTN4_FILE = TEST_SUB_DIR + "simple_cntn4_overlap.seg";
     private static final String TEST_GATK_FILE_B37 = TEST_SUB_DIR + "SM-74NF5.called.seg";
+    private static final String TEST_GATK_EMPTY_FILE_B37 = TEST_SUB_DIR + "empty_b37.seg";
     private static final String REF = b37Reference;
     private static final String DS_PIK3CA_DIR  = largeFileTestDir + "funcotator" + File.separator + "small_ds_pik3ca" + File.separator;
     // This has transcripts with multiple gene names...
@@ -193,4 +194,25 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
 
     // TODO: hg38 test
     // TODO: Seg file with no segments test.  Test that a header is produced.
+    @Test
+    public void testEmptyGatkCalledSegmentFile() throws IOException {
+        final File outputFile = File.createTempFile("funcotatesegs_gatk_called", ".seg");
+
+        final ArgumentsBuilder arguments = new ArgumentsBuilder();
+        arguments.add("--" + CopyNumberStandardArgument.SEGMENTS_FILE_LONG_NAME);
+        arguments.add(TEST_GATK_EMPTY_FILE_B37);
+        arguments.add("--" + FuncotatorArgumentDefinitions.OUTPUT_FORMAT_LONG_NAME);
+        arguments.add(FuncotatorArgumentDefinitions.OutputFormatType.SEG);
+        arguments.add("--" + StandardArgumentDefinitions.REFERENCE_LONG_NAME);
+        arguments.add(REF);
+        arguments.add("-" + StandardArgumentDefinitions.OUTPUT_SHORT_NAME);
+        arguments.add(outputFile.getAbsolutePath());
+        arguments.add("--" + FuncotatorArgumentDefinitions.REFERENCE_VERSION_LONG_NAME);
+        arguments.add("hg19");
+        arguments.addArgument(FuncotatorArgumentDefinitions.DATA_SOURCES_PATH_LONG_NAME, DS_CNTN4_DIR);
+
+        runCommandLine(arguments);
+
+
+    }
 }
