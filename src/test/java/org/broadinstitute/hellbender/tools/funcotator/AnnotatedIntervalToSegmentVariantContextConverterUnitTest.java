@@ -1,6 +1,7 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
 import com.google.common.collect.ImmutableSortedMap;
+import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.variantcontext.VariantContextBuilder;
 import htsjdk.variant.vcf.VCFConstants;
@@ -22,6 +23,9 @@ public class AnnotatedIntervalToSegmentVariantContextConverterUnitTest extends G
     public Object[][] provideSegmentConversion() {
         final SimpleInterval interval = new SimpleInterval("2", 999999, 1500000);
         final SortedMap<String, String> testAnnotationsAmp = ImmutableSortedMap.of("FIELD1", "VALUE1", "FIELD2", "VALUE2", "CALL", "+");
+        final SortedMap<String, String> testAnnotationsDel = ImmutableSortedMap.of("FIELD1", "VALUE1", "FIELD2", "VALUE2", "CALL", "-");
+        final SortedMap<String, String> testAnnotationsNeutral = ImmutableSortedMap.of("FIELD1", "VALUE1", "FIELD2", "VALUE2", "CALL", "0");
+        final SortedMap<String, String> testAnnotationsNoCall = ImmutableSortedMap.of("FIELD1", "VALUE1", "FIELD2", "VALUE2");
         return new Object[][] {
                 {
                     new AnnotatedInterval(interval,
@@ -30,11 +34,40 @@ public class AnnotatedIntervalToSegmentVariantContextConverterUnitTest extends G
                         .chr(interval.getContig())
                         .start(interval.getStart())
                         .stop(interval.getEnd())
-                        .attributes(testAnnotationsAmp).attribute(VCFConstants.END_KEY, String.valueOf(interval.getEnd()))
+                        .attributes(testAnnotationsAmp).attribute(VCFConstants.END_KEY, interval.getEnd())
                         .alleles("G", "<INS>")
                         .make()
-
-                }
+                },{
+                    new AnnotatedInterval(interval,
+                            testAnnotationsDel),
+                    new VariantContextBuilder()
+                        .chr(interval.getContig())
+                        .start(interval.getStart())
+                        .stop(interval.getEnd())
+                        .attributes(testAnnotationsDel).attribute(VCFConstants.END_KEY, interval.getEnd())
+                        .alleles("G", "<DEL>")
+                        .make()
+                },{
+                    new AnnotatedInterval(interval,
+                            testAnnotationsNeutral),
+                    new VariantContextBuilder()
+                        .chr(interval.getContig())
+                        .start(interval.getStart())
+                        .stop(interval.getEnd())
+                        .attributes(testAnnotationsNeutral).attribute(VCFConstants.END_KEY, interval.getEnd())
+                        .alleles("G", "<COPY_NEUTRAL>")
+                        .make()
+                },{
+                    new AnnotatedInterval(interval,
+                            testAnnotationsNoCall),
+                    new VariantContextBuilder()
+                        .chr(interval.getContig())
+                        .start(interval.getStart())
+                        .stop(interval.getEnd())
+                        .attributes(testAnnotationsNoCall).attribute(VCFConstants.END_KEY, interval.getEnd())
+                        .alleles("G", Allele.UNSPECIFIED_ALTERNATE_ALLELE_STRING)
+                        .make()
+                },
         };
     }
 
