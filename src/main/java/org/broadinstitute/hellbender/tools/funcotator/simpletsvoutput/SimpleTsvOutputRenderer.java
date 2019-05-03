@@ -7,7 +7,6 @@ import htsjdk.variant.variantcontext.VariantContext;
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.configuration2.builder.fluent.Configurations;
 import org.apache.commons.configuration2.ex.ConfigurationException;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.barclay.utils.Utils;
@@ -151,7 +150,8 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
         }
     }
 
-    // Creates a list of desired output fields and a mapping to fields that exist in the funcotations.  Also, applies excluded fields and adds placeholders for .
+    // Creates a list of desired output fields and a mapping to fields that exist in the funcotations.  Also, applies excluded fields and adds placeholders for
+    //  default and override fields
     private LinkedHashMap<String, String> createColumnNameToFieldNameMap(final FuncotationMap funcotationMap, final String txId, final Set<String> excludedFields,
                                                                          final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
                                                                          final LinkedHashMap<String, String> unaccountedForOverrideAnnotations) {
@@ -184,9 +184,12 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
     }
 
     /**
-     * // TODO: Test override and defaults
      * Simple method that will produce a linked field:value hashmap using starting fields from the funcotations in a {@link FuncotationMap}
-     *  and a map of funcotation field name
+     *  and a map of funcotation field name.
+     *
+     *  This method does not add columns for defaults or overrides in the output map.  Just uses the override and
+     *  default mappings to look up values.  In other words, this method assumes that the keys in the
+     *  columnNameToFieldMap are the only ones of interest.
      *
      * @param columnNameToFieldMap Mapping from the output column name to the funcotation field name in the map.
      *                             Should be generated from
@@ -197,30 +200,36 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
      * @param unaccountedDefaultAnnotations default values that are not already represented in the funcotation map.
      * @param unaccountedOverrideAnnotations override values that are not already represented in the funcotation map.
      * @param excludedFields Names of columns to exclude when creating a final map from column name to the value.
-     * @return Column names to value mapping.  Keys will match the input columnNameToFieldMap.
+     * @return Column names to value mapping.  Keys will match the input columnNameToFieldMap.  Never {@code null}.  If
+     * no suitable value is found, this will populate with an empty string ("").
      */
-    private static LinkedHashMap<String, String> createColumnNameToValueMap(final LinkedHashMap<String, String> columnNameToFieldMap,
+    @VisibleForTesting
+    static LinkedHashMap<String, String> createColumnNameToValueMap(final LinkedHashMap<String, String> columnNameToFieldMap,
                                                                       final FuncotationMap funcotationMap, final String txId, final Allele allele,
                                                                             final LinkedHashMap<String, String> unaccountedDefaultAnnotations,
                                                                             final LinkedHashMap<String, String> unaccountedOverrideAnnotations, final Set<String> excludedFields) {
 
         final LinkedHashMap<String, String> result = new LinkedHashMap<>();
-        unaccountedDefaultAnnotations.entrySet().stream()
-                .filter(e -> !excludedFields.contains(e.getKey()))
-                .forEach(e -> result.put(e.getKey(),e.getValue()));
 
         // Simply grab the funcotation field using the column name to funcotation field map.  Filter out any values.
-        //  Note that this will overwrite the defaults specified in the default annotations.
-        columnNameToFieldMap.entrySet().stream()
-                .filter(e -> !excludedFields.contains(e.getKey()))
-                .filter(colEntry -> funcotationMap.getFieldValue(txId, colEntry.getValue(), allele) != null)
-                .map(colEntry -> Pair.of(colEntry.getKey(), funcotationMap.getFieldValue(txId, colEntry.getValue(), allele)))
-                .forEach(p -> result.put(p.getLeft(), p.getRight()));
+        // Note that the keys will come out in order, since columnNameToFieldMap is a LinkedHashMap.
+        for (final Map.Entry<String, String> entry : columnNameToFieldMap.entrySet()) {
+            final String key = entry.getKey();
+            final String funcotationFieldName = entry.getValue();
 
-        // For override annotations, just put the values in regardless of what is there.
-        unaccountedOverrideAnnotations.entrySet().stream()
-                .filter(e -> !excludedFields.contains(e.getKey()))
-                .forEach(e -> result.put(e.getKey(), e.getValue()));
+            if (excludedFields.contains(key)) {
+                continue;
+            }
+            final String funcotationMapFieldValue = funcotationMap.getFieldValue(txId, funcotationFieldName, allele);
+
+            // The final value is (in priority order) override annotation, funcotation field value, default annotation,
+            //   empty string ("").
+            final String finalValue = unaccountedOverrideAnnotations.getOrDefault(key,
+                    funcotationMapFieldValue == null ? unaccountedDefaultAnnotations.getOrDefault(key, "")
+                            : funcotationMapFieldValue
+                    );
+            result.put(key, finalValue);
+        }
 
         return result;
     }

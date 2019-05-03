@@ -266,6 +266,7 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
                 )));
     }
 
+    // This tests both getColumnNameToFuncotationFieldMap, createColumnNameToValueMap, and the output file itself.
     @Test(dataProvider = "provideForAliasing")
     public void testAliasing(final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
                              final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
@@ -280,14 +281,22 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
         // You must write one record since SimpleTsvOutputRenderer lazy loads the writer.
         simpleTsvOutputRenderer.write(segVC, funcotationMap);
 
-        // Test that all columns are in the output and the proper aliases are set up.
+        // Test that all columns are in the output and the proper aliases are set up.  A whitebox test.
         final LinkedHashMap<String, String> columnNameToFuncotationFieldMap = simpleTsvOutputRenderer.getColumnNameToFuncotationFieldMap();
         Assert.assertEquals(columnNameToFuncotationFieldMap.keySet(), new LinkedHashSet<>(gtAliasKeys));
         Assert.assertEquals(columnNameToFuncotationFieldMap.values(), new LinkedHashSet<>(gtAliasFuncotationFields));
 
+        // Check the aliasing to the values.  A whitebox test
+        // This next line assumes that all test funcotation maps have the same tx ID (None) and alternate allele (copy neutral)
+        final LinkedHashMap<String, String> columnNameToFuncotationValueMap = SimpleTsvOutputRenderer.createColumnNameToValueMap(columnNameToFuncotationFieldMap,
+                funcotationMap, FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY, AnnotatedIntervalToSegmentVariantContextConverter.COPY_NEUTRAL_ALLELE, unaccountedForDefaultAnnotations,
+                unaccountedForOverrideAnnotations, excludedOutputFields);
+        Assert.assertEquals(columnNameToFuncotationValueMap.values(), gtFinalValues);
+
         // Get the actual values in the columns
         simpleTsvOutputRenderer.close();
 
+        // Check the output file contents
         final List<LinkedHashMap<String, String>> gtOutputRecords = Collections.singletonList(
                 FuncotatorUtils.createLinkedHashMapFromLists(gtAliasKeys, gtFinalValues));
         assertTsvFile(outputFile, gtOutputRecords);
