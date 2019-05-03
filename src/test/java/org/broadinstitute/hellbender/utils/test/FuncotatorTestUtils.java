@@ -22,13 +22,15 @@ import org.broadinstitute.hellbender.utils.codecs.gencode.GencodeGtfFeatureBaseD
 import org.broadinstitute.hellbender.utils.codecs.gencode.GencodeGtfTranscriptFeature;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 import org.broadinstitute.hellbender.utils.reference.ReferenceBases;
+import org.broadinstitute.hellbender.utils.tsv.TableReader;
+import org.broadinstitute.hellbender.utils.tsv.TableUtils;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class FuncotatorTestUtils {
     private FuncotatorTestUtils() {}
@@ -293,4 +295,20 @@ public class FuncotatorTestUtils {
                         null)
         );
     }
+
+    public static TableReader<LinkedHashMap<String, String>> createLinkedHashMapListTableReader(final File inputFile) throws IOException {
+        return TableUtils.reader(inputFile.toPath(),
+                (columns, exceptionFactory) ->
+                        (dataLine) -> {
+                            final int columnCount = columns.names().size();
+                            return IntStream.range(0, columnCount).boxed().collect(Collectors.toMap(i -> columns.names().get(i),
+                                    dataLine::get,
+                                    (x1, x2) -> {
+                                        throw new IllegalArgumentException("Should not be able to have duplicate field names.");
+                                    },
+                                    LinkedHashMap::new));
+                        }
+        );
+    }
+
 }

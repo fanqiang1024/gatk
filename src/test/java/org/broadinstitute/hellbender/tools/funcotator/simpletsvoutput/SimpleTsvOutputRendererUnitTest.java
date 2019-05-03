@@ -16,7 +16,6 @@ import org.broadinstitute.hellbender.tools.funcotator.metadata.VcfFuncotationMet
 import org.broadinstitute.hellbender.utils.io.Resource;
 import org.broadinstitute.hellbender.utils.test.FuncotatorTestUtils;
 import org.broadinstitute.hellbender.utils.tsv.TableReader;
-import org.broadinstitute.hellbender.utils.tsv.TableUtils;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
@@ -26,14 +25,13 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
     private static final String TEST_SUB_DIR = toolsTestDir + "/funcotator/";
     private static final String SEG_CONFIG_FILE = TEST_SUB_DIR + "test_tsv_output.config";
     private static final String SEG_RESOURCE_FILE = "org/broadinstitute/hellbender/tools/funcotator/simple_funcotator_seg_file.config";
-    public static final String FUNCOTATION_FIELD_1 = "TO_BE_ALIASED1";
+    private static final String FUNCOTATION_FIELD_1 = "TO_BE_ALIASED1";
 
     @DataProvider
     public Object[][] provideForSimpleSegFileWriting() {
@@ -76,20 +74,7 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
     }
 
     private void assertTsvFile(final File outputFile, final List<LinkedHashMap<String, String>> gtOutputRecords) throws IOException {
-        final TableReader<LinkedHashMap<String,String>> outputReader = TableUtils.reader(outputFile.toPath(),
-                (columns, exceptionFactory) -> {
-                    return (dataLine) -> {
-                        final int columnCount = columns.names().size();
-                        return IntStream.range(0, columnCount).boxed().collect(Collectors.toMap(i -> columns.names().get(i),
-                                i -> dataLine.get(i),
-                                (x1, x2) -> {
-                                    throw new IllegalArgumentException("Should not be able to have duplicate field names.");
-                                },
-                                LinkedHashMap::new));
-
-                    };
-                }
-        );
+        final TableReader<LinkedHashMap<String, String>> outputReader = FuncotatorTestUtils.createLinkedHashMapListTableReader(outputFile);
 
         // Check that the ordering of the column is correct.
         final List<LinkedHashMap<String,String>> outputRecords = outputReader.toList();
@@ -145,7 +130,7 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
 
     @Test(dataProvider = "provideConfigFiles")
     public void testLoadingConfigFile(Path configFile, LinkedHashMap<String, List<String>> gt) {
-        LinkedHashMap<String, List<String>> guess = SimpleTsvOutputRenderer.createColumnNameToAliasesMap(configFile);
+        final LinkedHashMap<String, List<String>> guess = SimpleTsvOutputRenderer.createColumnNameToAliasesMap(configFile);
         assertLinkedHashMapsEqual(guess, gt);
     }
 

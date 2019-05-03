@@ -1,21 +1,29 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
+import com.google.common.collect.Lists;
 import htsjdk.samtools.util.Locatable;
+import org.apache.commons.configuration2.Configuration;
+import org.apache.commons.configuration2.builder.fluent.Configurations;
+import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.broadinstitute.hellbender.CommandLineProgramTest;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
+import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.testutils.ArgumentsBuilder;
 import org.broadinstitute.hellbender.tools.copynumber.arguments.CopyNumberStandardArgument;
 import org.broadinstitute.hellbender.tools.copynumber.utils.annotatedinterval.AnnotatedInterval;
 import org.broadinstitute.hellbender.tools.copynumber.utils.annotatedinterval.AnnotatedIntervalCollection;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
+import org.broadinstitute.hellbender.utils.io.Resource;
+import org.broadinstitute.hellbender.utils.test.FuncotatorTestUtils;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
@@ -31,6 +39,7 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
     private static final String DS_PIK3CA_DIR  = largeFileTestDir + "funcotator" + File.separator + "small_ds_pik3ca" + File.separator;
     // This has transcripts with multiple gene names...
     private static final String DS_CNTN4_DIR  = toolsTestDir + "funcotator" + File.separator + "small_cntn4_ds" + File.separator;
+    private static final String SEG_RESOURCE_FILE = "org/broadinstitute/hellbender/tools/funcotator/simple_funcotator_seg_file.config";
 
     @Test
     public void testSimpleNoOverlap() throws IOException {
@@ -193,7 +202,7 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
     }
 
     // TODO: hg38 test
-    // TODO: Seg file with no segments test.  Test that a header is produced.
+
     @Test
     public void testEmptyGatkCalledSegmentFile() throws IOException {
         final File outputFile = File.createTempFile("funcotatesegs_gatk_called", ".seg");
@@ -213,6 +222,15 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
 
         runCommandLine(arguments);
 
-
+        // Just read the resource config file for segments to get the column list
+        final Path configFile = Resource.getResourceContentsAsFile(SEG_RESOURCE_FILE).toPath();
+        try {
+            final Configuration configFileContents = new Configurations().properties(configFile.toFile());
+            final List<String> expectedColumns = Lists.newArrayList(configFileContents.getKeys());
+            final List<String> guessColumns = FuncotatorTestUtils.createLinkedHashMapListTableReader(outputFile).columns().names();
+            Assert.assertEquals(guessColumns, expectedColumns);
+        } catch (final ConfigurationException ce) {
+            throw new UserException.BadInput("Unable to read from XSV config file: " + configFile.toUri().toString(), ce);
+        }
     }
 }

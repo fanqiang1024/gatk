@@ -232,7 +232,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
      * @return mapping of output column names to possible field names in order of priority.  Never {@code null}
      */
     @VisibleForTesting
-    static LinkedHashMap<String, List<String>> createColumnNameToAliasesMap(final Path configFile){
+    static LinkedHashMap<String, List<String>> createColumnNameToAliasesMap(final Path configFile) {
 
         // Use Apache Commons configuration since it will preserve the order of the keys in the config file.
         //  Properties will not preserve the ordering, since it is backed by a HashSet.
